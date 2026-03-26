@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Chapter 1 — Variables & Data Types | Python Notes</title>
+<meta name="description" content="Comprehensive Python notes: Variables, Data Types, Strings, Numbers, Python 2 vs 3, Tips, and Interview Questions."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<style>
+:root{--bg:#0f0f1a;--sur:#1a1a2e;--sur2:#16213e;--pri:#6c63ff;--prl:#a09bff;--acc:#00d4aa;--txt:#e8eaf6;--muted:#8080a8;--brd:#2d2d4e;--card:#1e1e3a;--danger:#ff6b6b;--warn:#ffd166;--ok:#06d6a0;--info:#4cc9f0;}
+[data-theme=light]{--bg:#f0f0ff;--sur:#fff;--sur2:#ede7f6;--pri:#5c54d4;--prl:#7c74f4;--acc:#00a884;--txt:#12122a;--muted:#5a5a80;--brd:#d1c4e9;--card:#fff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Roboto',sans-serif;background:var(--bg);color:var(--txt);overflow-x:hidden;transition:background .3s,color .3s;}
+::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--pri);border-radius:3px;}
+#pgbar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--pri),var(--acc));width:0%;z-index:9999;transition:width .1s;}
+nav{position:fixed;top:3px;left:0;right:0;height:58px;background:var(--sur);border-bottom:1px solid var(--brd);display:flex;align-items:center;padding:0 1.2rem;gap:.8rem;z-index:1000;box-shadow:0 2px 20px rgba(0,0,0,.3);}
+.logo{font-weight:700;font-size:1rem;background:linear-gradient(135deg,var(--prl),var(--acc));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;}
+.back-btn{font-size:.78rem;background:var(--sur2);border:1px solid var(--brd);border-radius:20px;padding:.25rem .75rem;color:var(--muted);text-decoration:none;transition:.2s;white-space:nowrap;}
+.back-btn:hover{border-color:var(--pri);color:var(--prl);}
+.ch-tag{font-size:.72rem;background:var(--pri);color:#fff;padding:.18rem .55rem;border-radius:20px;white-space:nowrap;}
+#srch{flex:1;max-width:320px;background:var(--sur2);border:1px solid var(--brd);border-radius:24px;padding:.4rem .9rem;color:var(--txt);font-family:'Roboto',sans-serif;font-size:.88rem;outline:none;transition:border-color .2s;}
+#srch:focus{border-color:var(--pri);}
+#sres{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:min(480px,90vw);background:var(--card);border:1px solid var(--brd);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.4);z-index:2000;display:none;max-height:280px;overflow-y:auto;}
+.sri{padding:.65rem 1rem;cursor:pointer;border-bottom:1px solid var(--brd);font-size:.87rem;}
+.sri:hover{background:var(--sur2);}.sri mark{background:var(--pri);color:#fff;border-radius:3px;padding:0 2px;}
+#tbtn{margin-left:auto;background:var(--sur2);border:1px solid var(--brd);border-radius:50%;width:36px;height:36px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;color:var(--txt);transition:.2s;}
+#tbtn:hover{background:var(--pri);color:#fff;}
+#stoggle{display:none;background:none;border:none;color:var(--txt);font-size:1.3rem;cursor:pointer;}
+.layout{display:flex;padding-top:61px;min-height:100vh;}
+aside{width:252px;min-width:252px;background:var(--sur);border-right:1px solid var(--brd);position:fixed;top:61px;bottom:0;overflow-y:auto;padding:1.2rem .9rem;transition:transform .3s;z-index:900;}
+aside h3{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.65rem;padding-left:.4rem;}
+aside ul{list-style:none;}
+aside ul li a{display:flex;align-items:center;gap:.45rem;padding:.38rem .65rem;border-radius:8px;font-size:.82rem;color:var(--muted);text-decoration:none;transition:.2s;}
+aside ul li a:hover,aside ul li a.active{background:var(--pri);color:#fff;}
+aside ul li a .d{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+aside ul li ul{padding-left:1rem;margin-top:.15rem;}
+aside ul li ul li a{font-size:.78rem;}
+main{margin-left:252px;flex:1;padding:2rem 2.2rem 4rem;max-width:940px;}
+.ch-header{margin-bottom:2.2rem;}
+.ch-header h1{font-size:2.2rem;font-weight:700;background:linear-gradient(135deg,var(--prl),var(--acc));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.4rem;}
+.ch-header p.meta{font-size:.82rem;color:var(--muted);margin-bottom:.9rem;}
+.ch-prog{height:5px;background:var(--brd);border-radius:3px;overflow:hidden;}
+.ch-prog-fill{height:100%;background:linear-gradient(90deg,var(--pri),var(--acc));border-radius:3px;animation:grow 1.5s ease forwards;}
+@keyframes grow{from{width:0;}to{width:100%;}}
+section.ds{margin-bottom:2.2rem;scroll-margin-top:75px;}
+.stitle{font-size:1.3rem;font-weight:600;color:var(--prl);border-left:4px solid var(--pri);padding-left:.7rem;margin-bottom:1rem;display:flex;align-items:center;gap:.45rem;}
+.sub{font-size:1rem;font-weight:600;color:var(--acc);margin:1.1rem 0 .5rem;}
+p{line-height:1.8;color:var(--txt);margin-bottom:.7rem;font-size:.93rem;}
+ul.notes{margin-left:1.3rem;line-height:1.95;font-size:.92rem;}
+.cw{background:#1e1e2e;border-radius:10px;border:1px solid var(--brd);overflow:hidden;margin:.9rem 0;box-shadow:0 4px 18px rgba(0,0,0,.3);}
+.ch{display:flex;align-items:center;justify-content:space-between;padding:.45rem .9rem;background:#2a2a3e;font-size:.73rem;color:var(--muted);}
+.ch .dots span{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:3px;}
+.r{background:#ff5f57;}.y{background:#ffc027;}.g{background:#27c93f;}
+.cpb{background:none;border:1px solid var(--brd);border-radius:4px;color:var(--muted);padding:.12rem .45rem;cursor:pointer;font-size:.7rem;transition:.2s;}
+.cpb:hover{border-color:var(--acc);color:var(--acc);}
+.cw pre{margin:0!important;border-radius:0!important;background:transparent!important;padding:.9rem!important;}
+.cw pre code{font-family:'Roboto Mono',monospace;font-size:.85rem;}
+.box{border-radius:10px;padding:.85rem 1rem;margin:.9rem 0;border-left:4px solid;display:flex;gap:.75rem;align-items:flex-start;font-size:.88rem;}
+.box-icon{font-size:1.1rem;flex-shrink:0;margin-top:.05rem;}
+.tip{background:rgba(0,212,170,.08);border-color:var(--ok);}
+.warn{background:rgba(255,209,102,.08);border-color:var(--warn);}
+.err{background:rgba(255,107,107,.08);border-color:var(--danger);}
+.inf{background:rgba(76,201,240,.08);border-color:var(--info);}
+.box strong{display:block;margin-bottom:.18rem;}
+.tw{overflow-x:auto;margin:.9rem 0;}
+table{width:100%;border-collapse:collapse;font-size:.86rem;}
+th{background:var(--pri);color:#fff;padding:.55rem .9rem;text-align:left;}
+td{padding:.5rem .9rem;border-bottom:1px solid var(--brd);}
+tr:nth-child(even) td{background:var(--sur2);}
+.tag{display:inline-block;background:rgba(108,99,255,.14);color:var(--prl);border:1px solid rgba(108,99,255,.28);border-radius:20px;padding:.12rem .58rem;font-size:.75rem;margin:.18rem;}
+.beyond{background:linear-gradient(135deg,rgba(108,99,255,.1),rgba(0,212,170,.07));border:1px solid var(--pri);border-radius:14px;padding:1.3rem 1.4rem;margin:1.8rem 0;}
+.beyond h2{font-size:1.15rem;font-weight:700;color:var(--prl);margin-bottom:.9rem;display:flex;align-items:center;gap:.45rem;}
+.sheet{background:var(--card);border:1px solid var(--brd);border-radius:14px;padding:1.3rem 1.4rem;margin-top:2.2rem;}
+.sheet h2{font-size:1.15rem;font-weight:700;color:var(--acc);margin-bottom:.9rem;display:flex;align-items:center;gap:.45rem;}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.9rem;}
+.si{background:var(--sur2);border-radius:8px;padding:.7rem .9rem;}
+.si .sl{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.25rem;}
+.si code{font-family:'Roboto Mono',monospace;font-size:.8rem;color:var(--acc);}
+/* Interview Q */
+.iq{border:1px solid var(--brd);border-radius:12px;margin:.8rem 0;overflow:hidden;}
+.iq-q{padding:.85rem 1.1rem;cursor:pointer;font-weight:500;font-size:.9rem;display:flex;justify-content:space-between;align-items:center;background:var(--sur2);transition:.2s;user-select:none;}
+.iq-q:hover{background:var(--sur);}
+.iq-q .arr{transition:transform .2s;font-size:.75rem;color:var(--muted);}
+.iq-a{display:none;padding:.9rem 1.1rem;font-size:.88rem;line-height:1.75;border-top:1px solid var(--brd);background:var(--card);}
+.iq.open .iq-q{color:var(--prl);}
+.iq.open .arr{transform:rotate(180deg);}
+.iq.open .iq-a{display:block;}
+/* Tips grid */
+.tips-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin:.9rem 0;}
+.tip-card{background:var(--sur2);border:1px solid var(--brd);border-radius:12px;padding:1rem 1.1rem;}
+.tip-card h4{font-size:.9rem;font-weight:600;color:var(--prl);margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;}
+.tip-card p{font-size:.82rem;color:var(--muted);line-height:1.65;margin:0;}
+/* diff table */
+.diff-row td:first-child{color:var(--warn);font-family:'Roboto Mono',monospace;font-size:.83rem;}
+.diff-row td:last-child{color:var(--ok);font-family:'Roboto Mono',monospace;font-size:.83rem;}
+#fab{position:fixed;bottom:1.8rem;right:1.8rem;width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--pri),var(--acc));border:none;color:#fff;font-size:1.2rem;cursor:pointer;box-shadow:0 4px 20px rgba(108,99,255,.4);display:none;align-items:center;justify-content:center;transition:.3s;z-index:999;}
+#fab:hover{transform:scale(1.1);}
+@media(max-width:768px){aside{transform:translateX(-100%);}aside.open{transform:translateX(0);}main{margin-left:0;padding:1rem 1rem 4rem;}#stoggle{display:block;}.ch-header h1{font-size:1.5rem;}}
+</style>
+</head>
+<body>
+<div id="pgbar"></div>
+<nav>
+  <button id="stoggle" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button>
+  <a href="index.html" class="back-btn">← All Chapters</a>
+  <div class="logo">🐍 Python Notes</div>
+  <span class="ch-tag">Ch. 01</span>
+  <input id="srch" type="search" placeholder="🔍  Search this page…" autocomplete="off"/>
+  <div id="sres"></div>
+  <button id="tbtn" onclick="toggleTheme()" aria-label="Toggle theme">🌙</button>
+</nav>
+<div class="layout">
+<aside id="sidebar">
+  <h3>Table of Contents</h3>
+  <ul>
+    <li><a href="#variables" class="tl"><span class="d"></span>1. Variables</a></li>
+    <li><a href="#naming" class="tl"><span class="d"></span>2. Naming Rules</a></li>
+    <li><a href="#datatypes" class="tl"><span class="d"></span>3. Data Types Overview</a></li>
+    <li><a href="#strings" class="tl"><span class="d"></span>4. Working with Strings</a>
+      <ul>
+        <li><a href="#case" class="tl"><span class="d"></span>Case Methods</a></li>
+        <li><a href="#concat" class="tl"><span class="d"></span>Concatenation</a></li>
+        <li><a href="#fstr" class="tl"><span class="d"></span>F-Strings</a></li>
+        <li><a href="#escape" class="tl"><span class="d"></span>Escape Characters</a></li>
+        <li><a href="#strip" class="tl"><span class="d"></span>Stripping Whitespace</a></li>
+        <li><a href="#methods" class="tl"><span class="d"></span>Useful String Methods</a></li>
+      </ul>
+    </li>
+    <li><a href="#numbers" class="tl"><span class="d"></span>5. Numbers & Arithmetic</a></li>
+    <li><a href="#typeconv" class="tl"><span class="d"></span>6. Type Conversion</a></li>
+    <li><a href="#py2v3" class="tl"><span class="d"></span>7. Python 2 vs 3</a></li>
+    <li><a href="#tips" class="tl"><span class="d"></span>8. Tips & Tricks</a></li>
+    <li><a href="#interview" class="tl"><span class="d"></span>9. Interview Questions</a></li>
+    <li><a href="#beyond" class="tl"><span class="d"></span>10. Beyond the Basics</a></li>
+    <li><a href="#cheat" class="tl"><span class="d"></span>11. Cheat Sheet</a></li>
+  </ul>
+</aside>
+<main id="mc">
+  <header class="ch-header">
+    <h1>Chapter 1: Variables &amp; Data Types</h1>
+    <p class="meta">📅 Based on <em>Python Crash Course</em> &nbsp;·&nbsp; 🕐 ~18 min read</p>
+    <div class="ch-prog"><div class="ch-prog-fill"></div></div>
+  </header>
+
+  <!-- 1. VARIABLES -->
+  <section class="ds" id="variables">
+    <h2 class="stitle">📦 1. Variables</h2>
+    <p>A <strong>variable</strong> is a label that points to a value stored in memory. Python creates the variable the moment you assign a value — no explicit type declaration is needed (Python is <em>dynamically typed</em>).</p>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>variables_intro.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">message = "Hello world! This is Fardeen"
+print(message)          # Hello world! This is Fardeen
+
+# Reassign any time — Python adapts
+message = "Hello again!"
+print(message)          # Hello again!
+
+# Multiple assignment on one line
+x = y = z = 0
+a, b, c = 1, 2, 3       # unpacking</code></pre></div>
+    <div class="box err"><span class="box-icon">⚠️</span><div><strong>NameError</strong>Means you either forgot to assign a value, or made a typo in the variable name. Python is case-sensitive: <code>Message</code> ≠ <code>message</code>.</div></div>
+  </section>
+
+  <!-- 2. NAMING -->
+  <section class="ds" id="naming">
+    <h2 class="stitle">📝 2. Variable Naming Rules &amp; Conventions</h2>
+    <ul class="notes">
+      <li>Only letters, numbers, underscores — <strong>never start with a digit</strong></li>
+      <li>Spaces are illegal — use <code>underscore_case</code></li>
+      <li>Avoid Python keywords: <code>for</code>, <code>if</code>, <code>class</code>, <code>print</code>…</li>
+      <li>Be short but descriptive: <code>student_name</code> beats <code>sn</code> or <code>full_student_name_string</code></li>
+      <li>Avoid confusing <code>l</code> (letter ell) and <code>O</code> (letter oh) — they look like <code>1</code> and <code>0</code></li>
+    </ul>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>naming.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python"># ✅ Valid
+student_name = "Fardeen"
+_internal = 42
+item2 = "second"
+MAX_SIZE = 100          # constants use ALL_CAPS (convention)
+
+# ❌ Invalid
+# 2items = "bad"        → SyntaxError
+# my name = "bad"       → SyntaxError
+# for = 10              → SyntaxError (keyword)</code></pre></div>
+    <div class="box tip"><span class="box-icon">💡</span><div><strong>PEP 8 Convention</strong>Use <code>snake_case</code> for variables &amp; functions, <code>PascalCase</code> for classes, <code>ALL_CAPS</code> for constants. This is the universal Pythonic style.</div></div>
+  </section>
+
+  <!-- 3. DATA TYPES OVERVIEW -->
+  <section class="ds" id="datatypes">
+    <h2 class="stitle">📊 3. Data Types Overview</h2>
+    <p>Every value in Python has a type. Use <code>type()</code> to inspect it, and <code>isinstance()</code> to check membership.</p>
+    <div class="tw"><table>
+      <tr><th>Type</th><th>Keyword</th><th>Example</th><th>Notes</th></tr>
+      <tr><td>Integer</td><td><code>int</code></td><td><code>42</code></td><td>Whole numbers, no limit in size</td></tr>
+      <tr><td>Float</td><td><code>float</code></td><td><code>3.14</code></td><td>Decimal numbers (IEEE 754)</td></tr>
+      <tr><td>String</td><td><code>str</code></td><td><code>"hello"</code></td><td>Immutable sequence of characters</td></tr>
+      <tr><td>Boolean</td><td><code>bool</code></td><td><code>True</code> / <code>False</code></td><td>Subclass of <code>int</code> (True=1, False=0)</td></tr>
+      <tr><td>None</td><td><code>NoneType</code></td><td><code>None</code></td><td>Represents "no value"</td></tr>
+    </table></div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>types.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">print(type(42))         # &lt;class 'int'&gt;
+print(type(3.14))       # &lt;class 'float'&gt;
+print(type("hi"))       # &lt;class 'str'&gt;
+print(type(True))       # &lt;class 'bool'&gt;
+print(type(None))       # &lt;class 'NoneType'&gt;
+
+print(isinstance(42, int))      # True
+print(isinstance(True, int))    # True  ← bool IS an int</code></pre></div>
+  </section>
+
+  <!-- 4. STRINGS -->
+  <section class="ds" id="strings">
+    <h2 class="stitle">📜 4. Working with Strings</h2>
+    <p>A <strong>string</strong> is an immutable sequence of characters. Use single <code>'</code> or double <code>"</code> quotes — they are equivalent.</p>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>strings.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">"This is a string."
+'This also works.'
+
+# Use the other quote type to include quotes/apostrophes:
+msg1 = "I told my friend, 'Python is great!'"
+msg2 = "The language 'Python' is named after Monty Python."
+msg3 = "One of Python's strengths is its diverse community."
+
+# Triple quotes → multiline strings
+bio = """My name is Fardeen.
+I love Python programming.
+It's amazing."""</code></pre></div>
+    <div class="box err"><span class="box-icon">🚨</span><div><strong>SyntaxError — Mismatched Quotes</strong><code>'One of Python's strengths...'</code> ← the apostrophe ends the string early. Fix: wrap in double quotes or escape: <code>\'</code>.</div></div>
+
+    <div class="sub" id="case">🔠 4.1 Case Transformation Methods</div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>case_methods.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">name = "max verstappen"
+
+print(name.title())      # Max Verstappen  (each word capitalised)
+print(name.upper())      # MAX VERSTAPPEN
+print(name.lower())      # max verstappen
+print(name.capitalize()) # Max verstappen  (only first char)
+print(name.swapcase())   # MAX VERSTAPPEN → lower and vice versa</code></pre></div>
+    <div class="box tip"><span class="box-icon">💡</span><div><strong>Why .lower() matters</strong>When storing user input in a database, always <code>.lower()</code> it first — you can't trust what case the user typed. Display with whatever case makes sense.</div></div>
+
+    <div class="sub" id="concat">🔗 4.2 String Concatenation &amp; Repetition</div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>concat.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">first = "ada"
+last  = "lovelace"
+
+# Concatenation with +
+full = first + " " + last
+print(full.title())      # Ada Lovelace
+
+# Repetition with *
+print("-" * 30)          # ------------------------------ (30 dashes)
+print("ha" * 3)          # hahaha</code></pre></div>
+
+    <div class="sub" id="fstr">✨ 4.3 F-Strings — Modern String Interpolation</div>
+    <p>Introduced in Python 3.6, f-strings are the preferred way to embed expressions in strings. Prefix with <code>f</code> and place variables/expressions in <code>{ }</code>.</p>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>fstrings.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">first = "ada"
+last  = "lovelace"
+full  = f"{first} {last}"
+print(f"Hello, {full.title()}!")     # Hello, Ada Lovelace!
+
+# Any expression works inside { }
+price, qty = 49.99, 3
+print(f"Total: ${price * qty:.2f}")  # Total: $149.97
+
+# Python 3.8+ self-documenting expressions
+x = 42
+print(f"{x = }")                     # x = 42
+
+# Alignment / padding
+print(f"{'Name':<12} {'Score':>6}")
+print(f"{'Fardeen':<12} {98:>6}")</code></pre></div>
+    <div class="box inf"><span class="box-icon">ℹ️</span><div><strong>Older alternatives (Python &lt; 3.6)</strong><code>"Hello, {}!".format(name)</code> or <code>"Hello, %s!" % name</code> — both still valid but f-strings are faster and cleaner.</div></div>
+
+    <div class="sub" id="escape">↩️ 4.4 Escape Characters &amp; Special Sequences</div>
+    <div class="tw"><table>
+      <tr><th>Sequence</th><th>Meaning</th><th>Output example</th></tr>
+      <tr><td><code>\n</code></td><td>Newline</td><td>Moves to next line</td></tr>
+      <tr><td><code>\t</code></td><td>Tab</td><td>Adds a horizontal tab</td></tr>
+      <tr><td><code>\\</code></td><td>Literal backslash</td><td><code>\</code></td></tr>
+      <tr><td><code>\'</code></td><td>Literal single quote</td><td><code>'</code></td></tr>
+      <tr><td><code>\"</code></td><td>Literal double quote</td><td><code>"</code></td></tr>
+      <tr><td><code>\r</code></td><td>Carriage return</td><td>Goes to start of line</td></tr>
+    </table></div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>escape.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">print("Languages:\n\tPython\n\tC\n\tJavaScript")
+# Languages:
+#     Python
+#     C
+#     JavaScript
+
+# Raw strings — escape sequences are ignored:
+path = r"C:\Users\Fardeen\Documents"
+print(path)   # C:\Users\Fardeen\Documents</code></pre></div>
+
+    <div class="sub" id="strip">✂️ 4.5 Stripping Whitespace</div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>strip.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">lang = ' python '
+print(lang.rstrip())    # ' python'  (right stripped)
+print(lang.lstrip())    # 'python '  (left stripped)
+print(lang.strip())     # 'python'   (both sides)
+
+# Must reassign to make permanent:
+lang = lang.strip()
+print(lang)             # python</code></pre></div>
+    <div class="box warn"><span class="box-icon">⚡</span><div><strong>Strings are immutable — changes aren't automatic</strong>Methods always return a <em>new</em> string. If you don't save the result, it's lost.</div></div>
+
+    <div class="sub" id="methods">🔧 4.6 Useful String Methods Reference</div>
+    <div class="tw"><table>
+      <tr><th>Method</th><th>What it does</th><th>Example</th></tr>
+      <tr><td><code>.find(sub)</code></td><td>Returns index of first match, -1 if not found</td><td><code>"hello".find("ll") → 2</code></td></tr>
+      <tr><td><code>.replace(old,new)</code></td><td>Replaces all occurrences</td><td><code>"hi hi".replace("hi","bye") → "bye bye"</code></td></tr>
+      <tr><td><code>.split(sep)</code></td><td>Splits into a list</td><td><code>"a,b,c".split(",") → ['a','b','c']</code></td></tr>
+      <tr><td><code>.join(iter)</code></td><td>Joins iterable with separator</td><td><code>", ".join(["A","B"]) → "A, B"</code></td></tr>
+      <tr><td><code>.count(sub)</code></td><td>Counts occurrences</td><td><code>"banana".count("a") → 3</code></td></tr>
+      <tr><td><code>.startswith(s)</code></td><td>Returns True/False</td><td><code>"Python".startswith("Py") → True</code></td></tr>
+      <tr><td><code>.endswith(s)</code></td><td>Returns True/False</td><td><code>"image.png".endswith(".png") → True</code></td></tr>
+      <tr><td><code>.isdigit()</code></td><td>All chars are digits?</td><td><code>"123".isdigit() → True</code></td></tr>
+      <tr><td><code>.isalpha()</code></td><td>All chars are letters?</td><td><code>"abc".isalpha() → True</code></td></tr>
+      <tr><td><code>len(s)</code></td><td>Number of characters</td><td><code>len("hello") → 5</code></td></tr>
+    </table></div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>string_methods.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">email = "  User@Example.COM  "
+clean = email.strip().lower()       # "user@example.com"
+
+sentence = "Python is awesome"
+words = sentence.split()            # ['Python', 'is', 'awesome']
+print(" | ".join(words))            # Python | is | awesome
+
+filename = "report_2024.pdf"
+if filename.endswith(".pdf"):
+    print("It's a PDF file")</code></pre></div>
+  </section>
+
+  <!-- 5. NUMBERS -->
+  <section class="ds" id="numbers">
+    <h2 class="stitle">🔢 5. Numbers &amp; Arithmetic</h2>
+    <div class="tw"><table>
+      <tr><th>Operator</th><th>Meaning</th><th>Example</th><th>Result</th></tr>
+      <tr><td><code>+</code></td><td>Addition</td><td><code>3 + 2</code></td><td>5</td></tr>
+      <tr><td><code>-</code></td><td>Subtraction</td><td><code>10 - 7</code></td><td>3</td></tr>
+      <tr><td><code>*</code></td><td>Multiplication</td><td><code>4 * 5</code></td><td>20</td></tr>
+      <tr><td><code>/</code></td><td>Division (always float)</td><td><code>10 / 2</code></td><td>5.0</td></tr>
+      <tr><td><code>//</code></td><td>Floor Division</td><td><code>10 // 3</code></td><td>3</td></tr>
+      <tr><td><code>%</code></td><td>Modulo (remainder)</td><td><code>10 % 3</code></td><td>1</td></tr>
+      <tr><td><code>**</code></td><td>Exponentiation</td><td><code>2 ** 10</code></td><td>1024</td></tr>
+    </table></div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>numbers.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">print(10 / 3)    # 3.3333...  (Python 3: always float)
+print(10 // 3)   # 3          (floor = round down)
+print(10 % 3)    # 1          (remainder)
+print(2 ** 10)   # 1024
+
+# Floats can be imprecise — IEEE 754 limitation
+print(0.1 + 0.2) # 0.30000000000000004
+# Fix: use round() or the decimal module
+print(round(0.1 + 0.2, 2))  # 0.3</code></pre></div>
+    <div class="box tip"><span class="box-icon">💡</span><div><strong>Augmented Assignment Operators</strong><code>x += 1</code> is shorthand for <code>x = x + 1</code>. Also: <code>-=</code>, <code>*=</code>, <code>/=</code>, <code>//=</code>, <code>**=</code>, <code>%=</code>.</div></div>
+  </section>
+
+  <!-- 6. TYPE CONVERSION -->
+  <section class="ds" id="typeconv">
+    <h2 class="stitle">🔄 6. Type Conversion</h2>
+    <p>Python is <em>strongly typed</em> — it won't silently mix types. Use built-in functions to convert between them.</p>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>type_conversion.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">age = 23
+
+# ❌ TypeError — can't concatenate int to str
+# message = "Happy " + age + "rd Birthday!"
+
+# ✅ Use str() to convert first
+message = "Happy " + str(age) + "rd Birthday!"
+print(message)    # Happy 23rd Birthday!
+
+# ✅ Or just use an f-string (no conversion needed)
+print(f"Happy {age}rd Birthday!")
+
+# Conversion functions
+int("42")         # → 42
+float("3.14")     # → 3.14
+str(100)          # → "100"
+bool(0)           # → False
+bool("hello")     # → True (non-empty string is truthy)</code></pre></div>
+    <div class="box err"><span class="box-icon">🚨</span><div><strong>TypeError</strong><code>Can't convert 'int' object to str implicitly</code> — Python refuses to guess your intent. Explicit is better than implicit (Zen of Python).</div></div>
+    <div class="tw"><table>
+      <tr><th>Function</th><th>Converts To</th><th>Example</th></tr>
+      <tr><td><code>int(x)</code></td><td>Integer</td><td><code>int("42") → 42</code></td></tr>
+      <tr><td><code>float(x)</code></td><td>Float</td><td><code>float("3.14") → 3.14</code></td></tr>
+      <tr><td><code>str(x)</code></td><td>String</td><td><code>str(100) → "100"</code></td></tr>
+      <tr><td><code>bool(x)</code></td><td>Boolean</td><td><code>bool(0) → False</code></td></tr>
+      <tr><td><code>complex(x)</code></td><td>Complex number</td><td><code>complex(2,3) → (2+3j)</code></td></tr>
+    </table></div>
+  </section>
+
+  <!-- 7. PYTHON 2 vs 3 -->
+  <section class="ds" id="py2v3">
+    <h2 class="stitle">🐍 7. Python 2 vs Python 3 — Key Differences</h2>
+    <div class="box err"><span class="box-icon">🚨</span><div><strong>Python 2 is dead</strong>Python 2 reached end-of-life on January 1, 2020. Always use Python 3 for new projects. You'll still encounter Python 2 code in legacy systems.</div></div>
+    <div class="tw"><table>
+      <tr><th>Feature</th><th>Python 2</th><th>Python 3</th></tr>
+      <tr class="diff-row"><td>print</td><td><code>print "hello"</code></td><td><code>print("hello")</code></td></tr>
+      <tr class="diff-row"><td>Integer division</td><td><code>3 / 2 → 1</code></td><td><code>3 / 2 → 1.5</code></td></tr>
+      <tr class="diff-row"><td>String type</td><td>ASCII by default</td><td>Unicode (UTF-8) by default</td></tr>
+      <tr class="diff-row"><td>input()</td><td><code>raw_input()</code></td><td><code>input()</code></td></tr>
+      <tr class="diff-row"><td>range()</td><td>Returns a list</td><td>Returns a lazy iterator</td></tr>
+      <tr class="diff-row"><td>Long integers</td><td>Separate <code>long</code> type</td><td>Just <code>int</code> (unlimited size)</td></tr>
+      <tr class="diff-row"><td>f-strings</td><td>Not available</td><td>Available (3.6+)</td></tr>
+      <tr class="diff-row"><td>Type hints</td><td>Not supported</td><td>Supported (3.5+)</td></tr>
+      <tr class="diff-row"><td><code>__future__</code> imports</td><td>Used to get Py3 features</td><td>Not needed</td></tr>
+    </table></div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>py2_vs_py3.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python"># --- print ---
+# Python 2:  print "hello"
+# Python 3:  print("hello")
+
+# --- Division ---
+# Python 2:  3 / 2 → 1       (integer truncation!)
+# Python 3:  3 / 2 → 1.5
+# Python 2 workaround: 3.0 / 2 → 1.5
+
+# --- User input ---
+# Python 2:  name = raw_input("Name: ")
+# Python 3:  name = input("Name: ")
+
+# --- range ---
+# Python 2:  range(5) → [0,1,2,3,4]   (whole list in memory)
+# Python 3:  range(5) → range(0,5)     (lazy — no memory waste)
+
+# --- Unicode strings ---
+# Python 2:  u"Ünïcödé"  (needs u prefix)
+# Python 3:  "Ünïcödé"   (all strings are Unicode by default)</code></pre></div>
+
+  <!-- 8. TIPS & TRICKS -->
+  <section class="ds" id="tips">
+    <h2 class="stitle">💡 8. Tips &amp; Tricks</h2>
+    <div class="tips-grid">
+      <div class="tip-card"><h4>🔁 Swap Without Temp</h4><p>Use tuple unpacking: <code>a, b = b, a</code>. No third variable needed — purely Pythonic.</p></div>
+      <div class="tip-card"><h4>🔍 Check Truthiness</h4><p>Empty string <code>""</code>, <code>0</code>, <code>None</code>, empty list <code>[]</code> are all <strong>falsy</strong>. Use <code>if name:</code> instead of <code>if name != "":</code>.</p></div>
+      <div class="tip-card"><h4>⛓️ Chain String Methods</h4><p><code>email.strip().lower().replace(" ", "")</code> — chain as many methods as you need in one line.</p></div>
+      <div class="tip-card"><h4>📐 Formatted Numbers</h4><p><code>f"{1000000:,}"</code> → <code>1,000,000</code>. Use <code>:,.2f</code> for currency: <code>f"${price:,.2f}"</code></p></div>
+      <div class="tip-card"><h4>🧮 Multiple Assignment</h4><p><code>x = y = z = 0</code> assigns the same value to multiple variables at once.</p></div>
+      <div class="tip-card"><h4>🔤 String Check Shortcuts</h4><p><code>"py" in "python"</code> → <code>True</code>. Use <code>in</code> / <code>not in</code> for substring checks instead of <code>.find()</code>.</p></div>
+      <div class="tip-card"><h4>📏 String Length Guard</h4><p>Always validate user input length: <code>if len(username) &gt; 20: ...</code> before saving to a DB.</p></div>
+      <div class="tip-card"><h4>🎯 Walrus Operator (3.8+)</h4><p><code>if (n := len(name)) &gt; 5:</code> — assigns and checks in one expression. Great in loops.</p></div>
+    </div>
+    <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>tricks.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python"># Swap
+a, b = 1, 2
+a, b = b, a   # a=2, b=1
+
+# Truthiness check
+username = input("Enter name: ").strip()
+if not username:
+    print("Name cannot be empty!")
+
+# in operator for substring
+if "gmail" in email.lower():
+    print("Gmail user")
+
+# Number formatting
+salary = 95000
+print(f"Salary: ${salary:,.2f}")   # Salary: $95,000.00
+
+# Walrus operator
+import random
+nums = [random.randint(1,10) for _ in range(5)]
+if (n := len(nums)) > 3:
+    print(f"Long list: {n} items")</code></pre></div>
+  </section>
+
+  <!-- 9. INTERVIEW QUESTIONS -->
+  <section class="ds" id="interview">
+    <h2 class="stitle">🎯 9. Interview Questions</h2>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem;">Click each question to reveal the answer.</p>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q1: What is the difference between a variable and a constant in Python? <span class="arr">▼</span></div>
+      <div class="iq-a">Python has no built-in <code>const</code> keyword. Variables are mutable labels pointing to values. Constants are a <em>convention</em> — variables named in <code>ALL_CAPS</code> (e.g., <code>MAX_SIZE = 100</code>) signal to other developers "don't change this." Python won't prevent you from changing it; the convention is a contract between programmers.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q2: What is the difference between <code>is</code> and <code>==</code>? <span class="arr">▼</span></div>
+      <div class="iq-a"><code>==</code> checks <strong>value equality</strong> (do they hold the same value?). <code>is</code> checks <strong>identity</strong> (are they the exact same object in memory?). Example: <code>a = [1,2]; b = [1,2]</code> → <code>a == b</code> is <code>True</code> but <code>a is b</code> is <code>False</code>. Use <code>is</code> only for <code>None</code> comparisons: <code>if x is None:</code>.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q3: Is Python dynamically or statically typed? What does that mean? <span class="arr">▼</span></div>
+      <div class="iq-a">Python is <strong>dynamically typed</strong>: types are determined at runtime, not compile time. You don't declare a variable's type. The same variable can hold different types at different times: <code>x = 5</code> then <code>x = "hello"</code>. Python is also <strong>strongly typed</strong>: it won't implicitly coerce types — <code>"5" + 5</code> raises a <code>TypeError</code>.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q4: What are truthy and falsy values in Python? <span class="arr">▼</span></div>
+      <div class="iq-a"><strong>Falsy values:</strong> <code>False</code>, <code>0</code>, <code>0.0</code>, <code>""</code> (empty string), <code>[]</code>, <code>{}</code>, <code>()</code>, <code>None</code>. Everything else is <strong>truthy</strong>. This lets you write clean guards: <code>if username:</code> instead of <code>if username != "":</code>.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q5: What is the difference between <code>str()</code>, <code>repr()</code>, and <code>format()</code>? <span class="arr">▼</span></div>
+      <div class="iq-a"><code>str(x)</code> returns a human-readable string — what you'd show a user. <code>repr(x)</code> returns a developer-oriented string that could recreate the object (e.g., includes quotes for strings). <code>format()</code> is used for formatted output and is now largely replaced by f-strings.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q6: Why does <code>0.1 + 0.2 ≠ 0.3</code> in Python? <span class="arr">▼</span></div>
+      <div class="iq-a">Floats use IEEE 754 binary floating-point representation, which cannot represent all decimal fractions exactly. <code>0.1</code> in binary is a repeating fraction, so small rounding errors accumulate. Fix: use <code>round(0.1+0.2, 2)</code> or the <code>decimal</code> module for exact arithmetic: <code>from decimal import Decimal; Decimal("0.1") + Decimal("0.2")</code>.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q7: What is the difference between <code>int</code> division in Python 2 vs Python 3? <span class="arr">▼</span></div>
+      <div class="iq-a">In Python 2, dividing two integers returns an integer with the remainder truncated: <code>3/2 → 1</code>. In Python 3, division always returns a float: <code>3/2 → 1.5</code>. To get floor division in Python 3, use <code>//</code>: <code>3//2 → 1</code>.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q8: Are strings mutable in Python? <span class="arr">▼</span></div>
+      <div class="iq-a">No. Strings are <strong>immutable</strong> — once created, their contents cannot be changed. Methods like <code>.upper()</code> or <code>.strip()</code> return a <em>new</em> string without modifying the original. To "modify" a string, you must reassign: <code>s = s.upper()</code>.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q9: What is a NameError vs a TypeError? <span class="arr">▼</span></div>
+      <div class="iq-a"><code>NameError</code>: Python can't find the variable — either it was never defined or there is a typo. <code>TypeError</code>: An operation is applied to the wrong type, e.g., trying to concatenate an <code>int</code> to a <code>str</code> without explicit conversion.</div>
+    </div>
+
+    <div class="iq" onclick="toggleIQ(this)">
+      <div class="iq-q">Q10: What is PEP 8 and why does it matter? <span class="arr">▼</span></div>
+      <div class="iq-a">PEP 8 is Python's official style guide, defining conventions for formatting code: indentation (4 spaces), max line length (79 chars), naming conventions (<code>snake_case</code>, <code>PascalCase</code>, <code>ALL_CAPS</code>), and more. Following PEP 8 makes code consistent, readable, and maintainable across teams.</div>
+    </div>
+  </section>
+
+  <!-- 10. BEYOND THE BASICS -->
+  <section class="ds" id="beyond">
+    <div class="beyond">
+      <h2>🚀 10. Beyond the Basics — Advanced Pythonic Patterns</h2>
+
+      <div class="sub">String Interning &amp; Identity</div>
+      <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>intern.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python"># Python interns (caches) small strings for efficiency
+a = "hello"
+b = "hello"
+print(a is b)      # True in CPython (same object!)
+
+c = "hello world"
+d = "hello world"
+print(c is d)      # May be False — longer strings aren't always interned
+# Always use == for value comparison, never rely on `is` for strings</code></pre></div>
+
+      <div class="sub">Type Hints (Python 3.5+)</div>
+      <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>type_hints.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python"># Type hints make code self-documenting (Python still doesn't enforce them)
+name: str = "Fardeen"
+age: int = 22
+gpa: float = 3.9
+active: bool = True
+
+def greet(name: str, age: int) -> str:
+    return f"Hello {name}, you are {age} years old."</code></pre></div>
+
+      <div class="sub">The Decimal Module for Precise Arithmetic</div>
+      <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>decimal_math.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">from decimal import Decimal, getcontext
+getcontext().prec = 4
+
+# Perfect for financial calculations:
+price = Decimal("19.99")
+tax   = Decimal("0.08")
+total = price + price * tax
+print(total)   # 21.59  — exact, no floating-point errors</code></pre></div>
+
+      <div class="sub">sys.maxsize — Python's Integer Limits</div>
+      <div class="cw"><div class="ch"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><span>big_int.py</span><button class="cpb" onclick="cp(this)">Copy</button></div>
+<pre><code class="language-python">import sys
+print(sys.maxsize)     # 9223372036854775807 on 64-bit
+
+# Python ints have NO upper bound — arbitrary precision:
+print(2 ** 1000)       # A 302-digit number — no overflow!</code></pre></div>
+    </div>
+  </section>
+
+  <!-- 11. CHEAT SHEET -->
+  <section class="ds" id="cheat">
+    <div class="sheet">
+      <h2>📋 11. Cheat Sheet — Variables &amp; Data Types</h2>
+      <div class="sgrid">
+        <div class="si"><div class="sl">Assign</div><code>x = "hello"</code></div>
+        <div class="si"><div class="sl">Multi-assign</div><code>a, b, c = 1, 2, 3</code></div>
+        <div class="si"><div class="sl">Check type</div><code>type(x)</code></div>
+        <div class="si"><div class="sl">Is instance?</div><code>isinstance(x, int)</code></div>
+        <div class="si"><div class="sl">Title case</div><code>"ada".title() → Ada</code></div>
+        <div class="si"><div class="sl">Uppercase</div><code>"ada".upper() → ADA</code></div>
+        <div class="si"><div class="sl">Lowercase</div><code>"ADA".lower() → ada</code></div>
+        <div class="si"><div class="sl">Concatenate</div><code>"hi" + " " + "there"</code></div>
+        <div class="si"><div class="sl">Repeat</div><code>"-" * 20</code></div>
+        <div class="si"><div class="sl">F-String</div><code>f"Hello, {name}!"</code></div>
+        <div class="si"><div class="sl">Format float</div><code>f"{3.14159:.2f}"</code></div>
+        <div class="si"><div class="sl">Strip both</div><code>" hi ".strip()</code></div>
+        <div class="si"><div class="sl">Replace</div><code>"hi hi".replace("hi","bye")</code></div>
+        <div class="si"><div class="sl">Split</div><code>"a,b".split(",") → ['a','b']</code></div>
+        <div class="si"><div class="sl">Join</div><code>", ".join(["A","B"])</code></div>
+        <div class="si"><div class="sl">Int to str</div><code>str(42) → "42"</code></div>
+        <div class="si"><div class="sl">Str to int</div><code>int("42") → 42</code></div>
+        <div class="si"><div class="sl">Floor divide</div><code>10 // 3 → 3</code></div>
+        <div class="si"><div class="sl">Modulo</div><code>10 % 3 → 1</code></div>
+        <div class="si"><div class="sl">Exponent</div><code>2 ** 10 → 1024</code></div>
+        <div class="si"><div class="sl">Substring check</div><code>"py" in "python"</code></div>
+        <div class="si"><div class="sl">String length</div><code>len("hello") → 5</code></div>
+      </div>
+      <div style="margin-top:1.3rem;">
+        <p style="font-size:.8rem;color:var(--muted);">🏷️ Key Terms:</p>
+        <div style="margin-top:.35rem;">
+          <span class="tag">variable</span><span class="tag">immutable</span><span class="tag">dynamic typing</span>
+          <span class="tag">string</span><span class="tag">integer</span><span class="tag">float</span>
+          <span class="tag">bool</span><span class="tag">NoneType</span><span class="tag">f-string</span>
+          <span class="tag">snake_case</span><span class="tag">PEP 8</span><span class="tag">NameError</span>
+          <span class="tag">TypeError</span><span class="tag">str()</span><span class="tag">int()</span>
+          <span class="tag">type()</span><span class="tag">isinstance()</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<button id="fab" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Back to top">↑</button>
+
+<script>
+function toggleTheme(){
+  const h=document.documentElement,dark=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme',dark?'light':'dark');
+  document.getElementById('tbtn').textContent=dark?'🌙':'☀️';
+}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');}
+window.addEventListener('scroll',()=>{
+  const d=document.documentElement,s=d.scrollTop/(d.scrollHeight-d.clientHeight);
+  document.getElementById('pgbar').style.width=(s*100)+'%';
+  document.getElementById('fab').style.display=d.scrollTop>400?'flex':'none';
+});
+function cp(btn){
+  navigator.clipboard.writeText(btn.closest('.cw').querySelector('code').innerText).then(()=>{
+    btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1800);
+  });
+}
+// TOC active
+const secs=document.querySelectorAll('section.ds');
+const tls=document.querySelectorAll('.tl');
+new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      tls.forEach(l=>l.classList.remove('active'));
+      const a=document.querySelector(`.tl[href="#${e.target.id}"]`);
+      if(a)a.classList.add('active');
+    }
+  });
+},{rootMargin:'-58px 0px -60% 0px'}).observe||(()=>{})();
+secs.forEach(s=>new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting){tls.forEach(l=>l.classList.remove('active'));const a=document.querySelector(`.tl[href="#${e.target.id}"]`);if(a)a.classList.add('active');}});
+},{rootMargin:'-58px 0px -60% 0px'}).observe(s));
+
+// Interview accordion
+function toggleIQ(el){el.classList.toggle('open');}
+
+// Search
+const idx=[];
+secs.forEach(s=>{idx.push({id:s.id,h:s.querySelector('h2')?.innerText||'',t:s.innerText});});
+const srch=document.getElementById('srch'),sres=document.getElementById('sres');
+srch.addEventListener('input',()=>{
+  const q=srch.value.trim().toLowerCase();
+  if(!q){sres.style.display='none';return;}
+  const hits=idx.filter(i=>i.t.toLowerCase().includes(q)).slice(0,7);
+  if(!hits.length){sres.innerHTML='<div class="sri" style="color:var(--muted)">No results.</div>';sres.style.display='block';return;}
+  sres.innerHTML=hits.map(h=>`<div class="sri" onclick="go('${h.id}')">${h.h.replace(new RegExp(q,'gi'),m=>'<mark>'+m+'</mark>')}</div>`).join('');
+  sres.style.display='block';
+});
+function go(id){document.getElementById(id)?.scrollIntoView({behavior:'smooth'});sres.style.display='none';srch.value='';}
+document.addEventListener('click',e=>{if(!e.target.closest('#srch')&&!e.target.closest('#sres'))sres.style.display='none';});
+</script>
+</body></html>
+
