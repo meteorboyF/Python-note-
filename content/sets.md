@@ -188,6 +188,53 @@ print("common:", sorted(features_a & features_b), "only in A:", features_a - fea
 | 9 | `1`, `1.0` and `True` collapse into one element | consistent types |
 | 10 | Mutable objects with custom `__hash__` that changes | hash immutable state |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+a = {1, 2, 3}
+b = {3, 4}
+print(a | b, a & b, a - b, a ^ b)
+```
+What prints?
+- [x] `{1, 2, 3, 4} {3} {1, 2} {1, 2, 4}`
+- [ ] `{1, 2, 3, 4} {3} {4} {1, 2, 4}`
+- [ ] `{1, 2, 3, 3, 4} {3} {1, 2} {4}`
+Union `|`, intersection `&`, difference `-` (in a but not b), and symmetric difference `^` (in exactly one).
+:::
+
+:::quiz
+```python norun
+s = set()
+d = {}
+e = {()}
+print(type(s).__name__, type(d).__name__, len(e), {1, 1.0, True})
+```
+What prints?
+- [x] `set dict 1 {1}`
+- [ ] `set set 0 {1, 1.0, True}`
+- [ ] `set dict 0 {1}`
+`{}` is an empty **dict**. `{()}` is a set containing one empty tuple. `1`, `1.0` and `True` are equal with equal hashes, so they collapse into one element.
+:::
+
+:::quiz
+```python norun
+try:
+    bad = {[1, 2], [3]}
+except TypeError:
+    print("TypeError")
+ok = {frozenset([1, 2]), frozenset([2, 1])}
+print(len(ok))
+```
+What prints?
+- [x] `TypeError` then `1`
+- [ ] `2`
+- [ ] `TypeError` then `2`
+Set members must be **hashable**: lists aren't, frozensets are. Two frozensets with the same items are equal (order doesn't matter), so they collapse into one element.
+:::
+
 ## Practice problems
 
 :::problem basic | Contains duplicate | set size
@@ -386,4 +433,165 @@ print(components(nodes, edges))
 ```
 :::explain
 Every node points at the **set object** of its component, and merging moves the smaller set's members into the larger one ("union by size"). Each node moves O(log n) times at most, because every move at least doubles the size of its set: O(n log n + E) total. The `is` check avoids merging a set with itself. The faster near-O(1) structure for this, **Union-Find**, is covered in *Graphs*.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Jewels and stones | LeetCode 771 | https://leetcode.com/problems/jewels-and-stones/
+`jewels` lists the jewel types (case-sensitive). Count how many characters in `stones` are jewels.
+:::starter
+```python norun
+def num_jewels_in_stones(jewels, stones):
+    pass
+```
+:::tests
+```python norun
+assert num_jewels_in_stones("aA", "aAAbbbb") == 3
+assert num_jewels_in_stones("z", "ZZ") == 0
+assert num_jewels_in_stones("", "abc") == 0
+assert num_jewels_in_stones("abc", "aabbccdd") == 6
+```
+:::solution
+```python
+def num_jewels_in_stones(jewels, stones):
+    jewel_set = set(jewels)                     # O(1) membership
+    return sum(s in jewel_set for s in stones)  # True counts as 1
+
+print(num_jewels_in_stones("aA", "aAAbbbb"))
+```
+:::explain
+`x in some_string` scans the string (O(len)), but `x in some_set` is O(1), so converting the lookup side to a set turns O(n·m) into O(n + m). Summing booleans counts the Trues.
+:::complexity
+O(n + m).
+:::end
+
+:::program basic | Unique email addresses | LeetCode 929 | https://leetcode.com/problems/unique-email-addresses/
+In the **local** part (before `@`), dots are ignored and everything after a `+` is ignored. The domain is kept as is. Return how many distinct addresses actually receive mail.
+:::starter
+```python norun
+def num_unique_emails(emails):
+    pass
+```
+:::tests
+```python norun
+assert num_unique_emails(["test.email+alex@leetcode.com", "test.e.mail+bob.cathy@leetcode.com", "testemail+david@lee.tcode.com"]) == 2
+assert num_unique_emails(["a@leetcode.com", "b@leetcode.com", "c@leetcode.com"]) == 3
+assert num_unique_emails(["a.b+c@x.com", "ab@x.com", "a.b@x.co.m"]) == 2
+```
+:::solution
+```python
+def num_unique_emails(emails):
+    seen = set()
+    for e in emails:
+        local, _, domain = e.partition("@")
+        local = local.split("+", 1)[0].replace(".", "")
+        seen.add(f"{local}@{domain}")
+    return len(seen)
+
+print(num_unique_emails(["test.email+alex@leetcode.com", "test.e.mail+bob.cathy@leetcode.com"]))
+```
+:::explain
+**Normalise, then deduplicate**: convert each address to its canonical form and let the set remove duplicates. `partition("@")` splits once, so dots in the domain survive untouched (the last test checks that). This is the standard "count distinct after cleaning" pattern used in data pipelines.
+:::complexity
+O(total characters).
+:::end
+
+:::program medium | Contains duplicate II | LeetCode 219 | https://leetcode.com/problems/contains-duplicate-ii/
+Return True if there are two **equal** values at indices `i ≠ j` with `|i − j| ≤ k`. Use a **sliding window set** of size k.
+:::starter
+```python norun
+def contains_nearby_duplicate(nums, k):
+    pass
+```
+:::tests
+```python norun
+assert contains_nearby_duplicate([1, 2, 3, 1], 3) is True
+assert contains_nearby_duplicate([1, 0, 1, 1], 1) is True
+assert contains_nearby_duplicate([1, 2, 3, 1, 2, 3], 2) is False
+assert contains_nearby_duplicate([1, 1], 0) is False
+assert contains_nearby_duplicate([], 5) is False
+```
+:::solution
+```python
+def contains_nearby_duplicate(nums, k):
+    window = set()
+    for i, x in enumerate(nums):
+        if x in window:
+            return True
+        window.add(x)
+        if len(window) > k:
+            window.remove(nums[i - k])          # keep only the last k values
+    return False
+
+print(contains_nearby_duplicate([1, 2, 3, 1], 3), contains_nearby_duplicate([1, 2, 3, 1, 2, 3], 2))
+```
+:::explain
+The set holds exactly the previous `k` values, which are the only ones close enough to count. Each step is an O(1) membership test, an add, and possibly a removal of the value that just fell out of range. With k = 0 the window is always empty after the trim, so it correctly returns False.
+:::trace
+`[1, 0, 1, 1]`, k = 1:
+| i | x | in window? | window after |
+|---|---|---|---|
+| 0 | 1 | no | {1} |
+| 1 | 0 | no | {1, 0} → trim nums[0]=1 → {0} |
+| 2 | 1 | no | {0, 1} → trim nums[1]=0 → {1} |
+| 3 | 1 | **yes** | → True |
+:::complexity
+O(n) time, O(k) space.
+:::end
+
+:::program hard | Word ladder | LeetCode 127 | https://leetcode.com/problems/word-ladder/
+Return the number of words in the **shortest** transformation sequence from `begin` to `end`, changing one letter at a time, where every intermediate word must be in `word_list`. Return 0 if it's impossible. Use **bidirectional BFS** with sets.
+:::starter
+```python norun
+def ladder_length(begin, end, word_list):
+    pass
+```
+:::tests
+```python norun
+assert ladder_length("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]) == 5
+assert ladder_length("hit", "cog", ["hot", "dot", "dog", "lot", "log"]) == 0
+assert ladder_length("a", "c", ["a", "b", "c"]) == 2
+assert ladder_length("hot", "dog", ["hot", "dog"]) == 0
+assert ladder_length("same", "same", ["same"]) == 1
+```
+:::hint
+Grow two frontier **sets**, one from each end, and always expand the smaller. A word meets the other side when a generated neighbour is in the opposite frontier. Remove visited words from the dictionary set so they're never revisited.
+:::solution
+```python
+import string
+
+def ladder_length(begin, end, word_list):
+    words = set(word_list)
+    if end not in words:
+        return 0
+    if begin == end:
+        return 1
+    front, back = {begin}, {end}
+    words -= {begin, end}
+    steps = 1
+    while front and back:
+        if len(front) > len(back):
+            front, back = back, front           # always expand the smaller side
+        nxt = set()
+        for w in front:
+            for i in range(len(w)):
+                for ch in string.ascii_lowercase:
+                    cand = w[:i] + ch + w[i + 1:]
+                    if cand in back:
+                        return steps + 1
+                    if cand in words:
+                        nxt.add(cand)
+                        words.discard(cand)      # visited
+        front = nxt
+        steps += 1
+    return 0
+
+print(ladder_length("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]))
+```
+:::explain
+Sets do all the heavy lifting: O(1) membership for the dictionary and for meeting checks, and `discard` to mark words as visited. **Bidirectional** search explores two small balls instead of one huge one: if each level multiplies the frontier by b, it does about 2·b^(d/2) work instead of b^d. Expanding the smaller frontier keeps that balance. This is BFS from the Graphs chapter, made fast with set algebra.
+:::complexity
+O(N · L · 26) in the worst case, and usually far less with the bidirectional trick.
 :::end

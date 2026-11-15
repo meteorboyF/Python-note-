@@ -323,6 +323,52 @@ print(vocab, encoded, [id2word[i] for i in encoded[:3]], label2id, history, roun
 | 9 | Relying on order in Python < 3.7 | (modern Python guarantees it) |
 | 10 | Mutating an object used as a key so its hash changes | only use immutable keys |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+d = {1: "a", 1.0: "b", True: "c"}
+print(d, len(d))
+```
+What prints?
+- [ ] `{1: 'a', 1.0: 'b', True: 'c'} 3`
+- [x] `{1: 'c'} 1`
+- [ ] `{True: 'c'} 1`
+`1 == 1.0 == True` and they hash identically, so they're the **same key**. The first key object (`1`) is kept, and the value is overwritten twice.
+:::
+
+:::quiz
+```python norun
+from collections import defaultdict
+d = defaultdict(int)
+if d["missing"] == 0:
+    pass
+print(len(d), d.get("other"), len(d))
+```
+What prints?
+- [ ] `0 0 0`
+- [x] `1 None 1`
+- [ ] `1 0 2`
+Just **reading** `d["missing"]` inserts the key with the default value 0. `.get` does **not** trigger the default factory, so it returns None and inserts nothing.
+:::
+
+:::quiz
+```python norun
+d = {"b": 2, "a": 1}
+d["c"] = 3
+del d["b"]
+d["b"] = 4
+print(list(d))
+```
+What prints?
+- [ ] `['a', 'b', 'c']`
+- [x] `['a', 'c', 'b']`
+- [ ] `['b', 'a', 'c']`
+Dicts preserve **insertion order** (since 3.7). Deleting `b` and re-inserting it puts it at the end. Updating an *existing* key keeps its position.
+:::
+
 ## Practice problems
 
 :::problem basic | Two Sum | hash map lookup
@@ -539,4 +585,242 @@ print(longest_consecutive([100, 4, 200, 1, 3, 2]), longest_consecutive([0, 3, 7,
 ```
 :::explain
 Only start counting from numbers that **begin** a run (`x-1` not present). Each number is then visited by the inner `while` at most once overall, so the total work is O(n) despite the nested loop. Sorting would be O(n log n). The hash set's O(1) membership is what makes it linear.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Ransom note | LeetCode 383 | https://leetcode.com/problems/ransom-note/
+Can `ransom_note` be built from the letters in `magazine` (each letter used at most once)?
+:::starter
+```python norun
+def can_construct(ransom_note, magazine):
+    pass
+```
+:::tests
+```python norun
+assert can_construct("a", "b") is False
+assert can_construct("aa", "ab") is False
+assert can_construct("aa", "aab") is True
+assert can_construct("", "xyz") is True
+assert can_construct("hello", "lloeh") is True
+```
+:::solution
+```python
+from collections import Counter
+
+def can_construct(ransom_note, magazine):
+    need = Counter(ransom_note)
+    have = Counter(magazine)
+    return all(have[ch] >= n for ch, n in need.items())
+
+def can_construct_short(ransom_note, magazine):
+    return not (Counter(ransom_note) - Counter(magazine))   # multiset difference
+
+print(can_construct("aa", "aab"), can_construct_short("aa", "ab"))
+```
+:::explain
+Two frequency tables answer the question in O(n + m). `Counter` returns 0 for missing keys, so `have[ch]` never raises. The one-liner uses **multiset subtraction**: whatever is left over is what the magazine can't supply, and an empty Counter is falsy.
+:::complexity
+O(n + m) time, O(alphabet) space.
+:::end
+
+:::program basic | Isomorphic strings | LeetCode 205 | https://leetcode.com/problems/isomorphic-strings/
+Two strings are isomorphic if the characters of `s` can be replaced to get `t`, where each character always maps to the same character, and **no two characters map to the same one**.
+:::starter
+```python norun
+def is_isomorphic(s, t):
+    pass
+```
+:::tests
+```python norun
+assert is_isomorphic("egg", "add") is True
+assert is_isomorphic("foo", "bar") is False
+assert is_isomorphic("paper", "title") is True
+assert is_isomorphic("badc", "baba") is False
+assert is_isomorphic("", "") is True
+```
+:::hint
+One dict isn't enough (see `"badc"`/`"baba"`): you need the mapping to work in **both** directions.
+:::solution
+```python
+def is_isomorphic(s, t):
+    s_to_t, t_to_s = {}, {}
+    for a, b in zip(s, t):
+        if s_to_t.setdefault(a, b) != b or t_to_s.setdefault(b, a) != a:
+            return False
+    return len(s) == len(t)
+
+def is_isomorphic_trick(s, t):
+    return len(set(s)) == len(set(t)) == len(set(zip(s, t)))
+
+print(is_isomorphic("paper", "title"), is_isomorphic("badc", "baba"), is_isomorphic_trick("egg", "add"))
+```
+:::explain
+`setdefault(a, b)` returns the existing mapping for `a`, or records `b` if there isn't one yet, so one call both reads and writes. Checking both directions enforces a **bijection**. The trick version notices that a valid pairing has exactly as many distinct pairs as distinct characters on each side.
+:::complexity
+O(n).
+:::end
+
+:::program medium | Insert, delete, get random in O(1) | LeetCode 380 | https://leetcode.com/problems/insert-delete-getrandom-o1/
+Implement `RandomizedSet` with average O(1) `insert(val)` and `remove(val)` (both return True if the set changed) and `get_random()` (each element equally likely).
+:::starter
+```python norun
+import random
+
+class RandomizedSet:
+    def __init__(self):
+        pass
+    def insert(self, val):
+        pass
+    def remove(self, val):
+        pass
+    def get_random(self):
+        pass
+```
+:::tests
+```python norun
+import random
+random.seed(0)
+r = RandomizedSet()
+assert r.insert(1) and not r.remove(2) and r.insert(2) and r.get_random() in (1, 2)
+assert r.remove(1) and not r.insert(2) and r.get_random() == 2
+r2 = RandomizedSet()
+for i in range(100): r2.insert(i)
+for i in range(0, 100, 2): r2.remove(i)
+seen = {r2.get_random() for _ in range(2000)}
+assert seen == set(range(1, 100, 2))
+```
+:::hint
+A list gives O(1) random access. A dict `value → index in the list` gives O(1) lookup. To remove from the middle of the list in O(1), **swap the target with the last element** and pop.
+:::solution
+```python
+import random
+
+class RandomizedSet:
+    def __init__(self):
+        self.vals = []
+        self.pos = {}                      # value -> index in self.vals
+
+    def insert(self, val):
+        if val in self.pos:
+            return False
+        self.pos[val] = len(self.vals)
+        self.vals.append(val)
+        return True
+
+    def remove(self, val):
+        if val not in self.pos:
+            return False
+        i, last = self.pos[val], self.vals[-1]
+        self.vals[i] = last                # move the last element into the hole
+        self.pos[last] = i
+        self.vals.pop()
+        del self.pos[val]
+        return True
+
+    def get_random(self):
+        return random.choice(self.vals)
+
+r = RandomizedSet()
+for x in [10, 20, 30]:
+    r.insert(x)
+r.remove(10)
+print(r.vals, r.pos, r.get_random() in (20, 30))
+```
+:::explain
+Neither structure alone suffices: a set can't pick a random element in O(1), and a list can't find an element in O(1). Combining them, the **dict stores positions**, which makes the swap-with-last removal possible without shifting. When removing the last element itself, the swap is harmless: it writes the value to its own slot, then deletes it.
+:::trace
+Remove 10 from vals [10, 20, 30]:
+| step | vals | pos |
+|---|---|---|
+| start | [10, 20, 30] | {10: 0, 20: 1, 30: 2} |
+| move 30 into slot 0 | [30, 20, 30] | 30 → 0 |
+| pop | [30, 20] | {20: 1, 30: 0} (10 deleted) |
+:::complexity
+O(1) average per operation.
+:::end
+
+:::program hard | LFU cache | LeetCode 460 | https://leetcode.com/problems/lfu-cache/
+Implement `LFUCache(capacity)` with O(1) `get(key)` (−1 if missing) and `put(key, value)`. When full, evict the **least frequently used** key, and among ties, the **least recently used** one. Both `get` and `put` on an existing key count as a use.
+:::starter
+```python norun
+from collections import defaultdict, OrderedDict
+
+class LFUCache:
+    def __init__(self, capacity):
+        pass
+    def get(self, key):
+        pass
+    def put(self, key, value):
+        pass
+```
+:::tests
+```python norun
+c = LFUCache(2)
+c.put(1, 1); c.put(2, 2)
+assert c.get(1) == 1
+c.put(3, 3)
+assert c.get(2) == -1 and c.get(3) == 3
+c.put(4, 4)
+assert c.get(1) == -1 and c.get(3) == 3 and c.get(4) == 4
+z = LFUCache(0); z.put(1, 1); assert z.get(1) == -1
+d = LFUCache(2); d.put(1, 1); d.put(1, 10); d.put(2, 2); d.put(3, 3)
+assert d.get(1) == 10 and d.get(2) == -1
+```
+:::hint
+Keep `key → (value, freq)`, and `freq → OrderedDict of keys` (insertion order = recency within that frequency). Track `min_freq`: when a key's frequency increases and its old bucket empties, and that bucket was `min_freq`, increment `min_freq`. A new key always resets `min_freq` to 1.
+:::solution
+```python
+from collections import defaultdict, OrderedDict
+
+class LFUCache:
+    def __init__(self, capacity):
+        self.cap = capacity
+        self.vals = {}                                  # key -> value
+        self.freq = {}                                  # key -> use count
+        self.buckets = defaultdict(OrderedDict)         # count -> keys in LRU order
+        self.min_freq = 0
+
+    def _touch(self, key):
+        f = self.freq[key]
+        del self.buckets[f][key]
+        if not self.buckets[f]:
+            del self.buckets[f]
+            if self.min_freq == f:
+                self.min_freq += 1
+        self.freq[key] = f + 1
+        self.buckets[f + 1][key] = None                 # most recent within the new count
+
+    def get(self, key):
+        if key not in self.vals:
+            return -1
+        self._touch(key)
+        return self.vals[key]
+
+    def put(self, key, value):
+        if self.cap == 0:
+            return
+        if key in self.vals:
+            self.vals[key] = value
+            self._touch(key)
+            return
+        if len(self.vals) == self.cap:
+            evict, _ = self.buckets[self.min_freq].popitem(last=False)   # LRU among the least frequent
+            if not self.buckets[self.min_freq]:
+                del self.buckets[self.min_freq]
+            del self.vals[evict], self.freq[evict]
+        self.vals[key], self.freq[key] = value, 1
+        self.buckets[1][key] = None
+        self.min_freq = 1
+
+c = LFUCache(2)
+c.put("a", 1); c.put("b", 2); c.get("a"); c.put("c", 3)
+print(sorted(c.vals), dict(c.freq))
+```
+:::explain
+Three dicts cooperate: values, per-key counts, and **buckets** grouping the keys that share a count. Each bucket is an `OrderedDict` used as an ordered set, so `popitem(last=False)` removes the least recent key with that count. `min_freq` always points at the bucket to evict from. It only changes when that bucket empties during a touch (+1), or when a new key arrives (reset to 1). Everything is O(1), which is the hardest dict-design problem in common interview rotation.
+:::complexity
+O(1) average per operation.
 :::end

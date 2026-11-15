@@ -276,6 +276,53 @@ print([x for x in [1, 2] for _ in range(3)])               # repeat each
 | 9 | Loop variable leaks after the loop | don't rely on it |
 | 10 | `list("hello")` splits characters | `["hello"]` for one element |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+a = [1, 2, 3]
+b = a
+a += [4]
+c = a
+a = a + [5]
+print(b, c, a)
+```
+What prints?
+- [ ] `[1, 2, 3] [1, 2, 3, 4] [1, 2, 3, 4, 5]`
+- [x] `[1, 2, 3, 4] [1, 2, 3, 4] [1, 2, 3, 4, 5]`
+- [ ] `[1, 2, 3, 4, 5] [1, 2, 3, 4, 5] [1, 2, 3, 4, 5]`
+`+=` on a list **mutates in place** (`b` sees the 4). `a = a + [5]` builds a **new** list and rebinds only `a`, so `b` and `c` still point at the old one.
+:::
+
+:::quiz
+```python norun
+xs = [0, 1, 2, 3, 4, 5]
+print(xs[1:-1:2], xs[::-2], xs[10:], xs[-100:2])
+```
+What prints?
+- [x] `[1, 3] [5, 3, 1] [] [0, 1]`
+- [ ] `[1, 3, 5] [5, 3, 1] [] [0, 1]`
+- [ ] `IndexError`
+`stop` is exclusive (`-1` means stop before the last item). A negative step walks backwards from the end. Out-of-range slice bounds are **clamped**, never errors.
+:::
+
+:::quiz
+```python norun
+nums = [1, 2, 2, 3]
+for x in nums:
+    if x == 2:
+        nums.remove(x)
+print(nums)
+```
+What prints?
+- [ ] `[1, 3]`
+- [x] `[1, 2, 3]`
+- [ ] `RuntimeError`
+After removing the first 2, everything shifts left, and the iterator's next index skips the second 2. Never mutate a list while iterating over it: rebuild it with a comprehension, or loop over a copy.
+:::
+
 ## Practice problems
 
 :::problem basic | Second largest distinct | single pass, edge cases
@@ -572,4 +619,194 @@ print(max_sliding_window([1, 3, -1, -3, 5, 3, 6, 7], 3))
 ```
 :::explain
 The deque keeps candidate indices with **decreasing** values. When a new value arrives, every smaller value behind it is useless (the new one is larger *and* will stay in the window longer), so pop them. The front is always the window's maximum. Each index is pushed and popped at most once: O(n) total. This **monotonic deque** pattern is covered in depth in *Stacks & Queues*.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Merge sorted array | LeetCode 88 | https://leetcode.com/problems/merge-sorted-array/
+`nums1` has length `m + n`: its first `m` items are sorted, and the last `n` are placeholder zeros. Merge the sorted `nums2` (length `n`) into `nums1` **in place**, with O(1) extra space. The function returns nothing.
+:::starter
+```python norun
+def merge(nums1, m, nums2, n):
+    pass
+```
+:::tests
+```python norun
+a = [1, 2, 3, 0, 0, 0]; merge(a, 3, [2, 5, 6], 3); assert a == [1, 2, 2, 3, 5, 6]
+b = [1]; merge(b, 1, [], 0); assert b == [1]
+c = [0]; merge(c, 0, [1], 1); assert c == [1]
+d = [4, 5, 6, 0, 0, 0]; merge(d, 3, [1, 2, 3], 3); assert d == [1, 2, 3, 4, 5, 6]
+e = [2, 0]; ref = e; merge(e, 1, [1], 1); assert ref == [1, 2] and merge([0], 0, [1], 1) is None
+```
+:::hint
+Fill from the **back**. The largest remaining element of the two lists goes into the last free slot, so nothing in `nums1` is overwritten before it has been read.
+:::solution
+```python
+def merge(nums1, m, nums2, n):
+    i, j, k = m - 1, n - 1, m + n - 1
+    while j >= 0:                         # once nums2 is empty, nums1's rest is already in place
+        if i >= 0 and nums1[i] > nums2[j]:
+            nums1[k] = nums1[i]
+            i -= 1
+        else:
+            nums1[k] = nums2[j]
+            j -= 1
+        k -= 1
+
+a = [1, 2, 3, 0, 0, 0]
+merge(a, 3, [2, 5, 6], 3)
+print(a)
+```
+:::explain
+Merging from the front would overwrite `nums1` values we still need. From the back, the write pointer `k` is always at or after the read pointer `i`, so it's safe. When `nums2` runs out we stop: whatever remains of `nums1` is already sorted and in place. The visualiser makes the three pointers easy to watch.
+:::trace
+`[1,2,3,_,_,_]` + `[2,5,6]`:
+| i | j | compare | write at k |
+|---|---|---|---|
+| 2 (3) | 2 (6) | 6 ≥ 3 | k=5 ← 6 |
+| 2 (3) | 1 (5) | 5 ≥ 3 | k=4 ← 5 |
+| 2 (3) | 0 (2) | 3 > 2 | k=3 ← 3 |
+| 1 (2) | 0 (2) | 2 ≥ 2 | k=2 ← 2 (from nums2) |
+| 1 | -1 | done | [1, 2, 2, 3, 5, 6] |
+:::complexity
+O(m + n) time, O(1) space.
+:::end
+
+:::program basic | Majority element | LeetCode 169 | https://leetcode.com/problems/majority-element/
+Return the element that appears **more than n/2 times** (it's guaranteed to exist). Do it in O(n) time and **O(1)** space with the Boyer–Moore voting algorithm.
+:::starter
+```python norun
+def majority_element(nums):
+    pass
+```
+:::tests
+```python norun
+assert majority_element([3, 2, 3]) == 3
+assert majority_element([2, 2, 1, 1, 1, 2, 2]) == 2
+assert majority_element([7]) == 7
+assert majority_element([1, 1, 2, 2, 2]) == 2
+import random
+for _ in range(100):
+    xs = [9] * 51 + [random.randint(0, 5) for _ in range(50)]
+    random.shuffle(xs)
+    assert majority_element(xs) == 9
+```
+:::hint
+Keep a `candidate` and a `count`. A matching element increments the count, a different one decrements it, and when the count hits 0 the next element becomes the new candidate.
+:::solution
+```python
+def majority_element(nums):
+    candidate, count = None, 0
+    for x in nums:
+        if count == 0:
+            candidate = x
+        count += 1 if x == candidate else -1
+    return candidate
+
+print(majority_element([2, 2, 1, 1, 1, 2, 2]))
+```
+:::explain
+Think of it as pairing off: every non-majority element can cancel at most one majority element. Since the majority has **more than half** the items, it can't be fully cancelled, so it's the last candidate standing. That's O(1) memory, compared with O(n) for `Counter`. (Without the guarantee, you'd need a second pass to verify the candidate.)
+:::trace
+`[2, 2, 1, 1, 1, 2, 2]`:
+| x | candidate | count |
+|---|---|---|
+| 2 | 2 | 1 |
+| 2 | 2 | 2 |
+| 1 | 2 | 1 |
+| 1 | 2 | 0 |
+| 1 | 1 | 1 |
+| 2 | 1 | 0 |
+| 2 | 2 | 1 → **2** |
+:::complexity
+O(n) time, O(1) space.
+:::end
+
+:::program medium | Rotate image | LeetCode 48 | https://leetcode.com/problems/rotate-image/
+Rotate an `n × n` matrix 90° clockwise **in place** (modify the given lists; don't create a new matrix and rebind).
+:::starter
+```python norun
+def rotate(matrix):
+    pass
+```
+:::tests
+```python norun
+m = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]; rows = [id(r) for r in m]
+rotate(m)
+assert m == [[7, 4, 1], [8, 5, 2], [9, 6, 3]] and [id(r) for r in m] == rows
+m2 = [[5, 1, 9, 11], [2, 4, 8, 10], [13, 3, 6, 7], [15, 14, 12, 16]]
+rotate(m2); assert m2 == [[15, 13, 2, 5], [14, 3, 4, 1], [12, 6, 8, 9], [16, 7, 10, 11]]
+one = [[1]]; rotate(one); assert one == [[1]]
+```
+:::hint
+Rotating 90° clockwise = **transpose** (swap `m[i][j]` with `m[j][i]`) and then **reverse each row**. Both steps can be done in place.
+:::solution
+```python
+def rotate(matrix):
+    n = len(matrix)
+    for i in range(n):
+        for j in range(i + 1, n):                  # transpose across the main diagonal
+            matrix[i][j], matrix[j][i] = matrix[j][i], matrix[i][j]
+    for row in matrix:
+        row.reverse()                              # mirror each row, in place
+
+m = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+rotate(m)
+for r in m:
+    print(r)
+```
+:::explain
+Starting `j` at `i + 1` swaps each pair across the diagonal exactly once (starting at 0 would swap twice and undo it). `row.reverse()` mutates each existing row object, which is why the row ids are unchanged, and the first test checks that. `matrix[:] = [list(r) for r in zip(*matrix[::-1])]` also works, but it allocates new rows.
+:::complexity
+O(n²) time, O(1) extra space.
+:::end
+
+:::program hard | Candy | LeetCode 135 | https://leetcode.com/problems/candy/
+Children stand in a line with `ratings`. Each child gets at least 1 candy, and a child with a **higher rating than a neighbour** must get more candy than that neighbour. Return the minimum total number of candies.
+:::starter
+```python norun
+def candy(ratings):
+    pass
+```
+:::tests
+```python norun
+assert candy([1, 0, 2]) == 5
+assert candy([1, 2, 2]) == 4
+assert candy([1, 3, 4, 5, 2]) == 11
+assert candy([5]) == 1
+assert candy([1, 2, 3, 4, 5]) == 15
+assert candy([5, 4, 3, 2, 1]) == 15
+assert candy([1, 3, 2, 2, 1]) == 7
+```
+:::hint
+Two passes. Left to right: if `r[i] > r[i-1]`, then `c[i] = c[i-1] + 1`. Right to left: if `r[i] > r[i+1]`, then `c[i] = max(c[i], c[i+1] + 1)`.
+:::solution
+```python
+def candy(ratings):
+    n = len(ratings)
+    c = [1] * n
+    for i in range(1, n):                       # satisfy the LEFT neighbour rule
+        if ratings[i] > ratings[i - 1]:
+            c[i] = c[i - 1] + 1
+    for i in range(n - 2, -1, -1):              # satisfy the RIGHT neighbour rule, keep the left one
+        if ratings[i] > ratings[i + 1]:
+            c[i] = max(c[i], c[i + 1] + 1)
+    return sum(c)
+
+print(candy([1, 3, 4, 5, 2]), candy([1, 0, 2]))
+```
+:::explain
+Each child has two independent constraints: one from the left neighbour, one from the right. The first pass gives the minimum that satisfies the left rule only, and the second pass raises values just enough for the right rule. Taking `max` keeps the left rule satisfied, so both hold with the smallest possible numbers. This **two-pass, two-direction** trick also solves Trapping Rain Water and Product Except Self.
+:::trace
+`[1, 3, 4, 5, 2]`:
+| pass | candies |
+|---|---|
+| start | [1, 1, 1, 1, 1] |
+| left → | [1, 2, 3, 4, 1] |
+| ← right | [1, 2, 3, 4, 1] (5 > 2: max(4, 1+1) = 4) |
+| sum | **11** |
+:::complexity
+O(n) time, O(n) space.
 :::end

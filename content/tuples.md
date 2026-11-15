@@ -225,6 +225,35 @@ print(loss, acc)
 | 9 | `namedtuple` field names must be valid identifiers | `rename=True` |
 | 10 | JSON turns tuples into lists | convert back after loading |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+t = (1, 2) * 2
+u = (1, [2])
+u[1].append(3)
+print(t, u, type((5)).__name__, type((5,)).__name__)
+```
+What prints?
+- [x] `(1, 2, 1, 2) (1, [2, 3]) int tuple`
+- [ ] `(2, 4) (1, [2, 3]) tuple tuple`
+- [ ] `TypeError`
+`*` repeats a sequence. The tuple can't change **which** objects it holds, but the list inside is mutable. Parentheses alone don't make a tuple: the **comma** does.
+:::
+
+:::quiz
+```python norun
+print(sorted([(2, "b"), (1, "z"), (2, "a"), (1, "a")]))
+```
+What prints?
+- [x] `[(1, 'a'), (1, 'z'), (2, 'a'), (2, 'b')]`
+- [ ] `[(1, 'z'), (1, 'a'), (2, 'b'), (2, 'a')]`
+- [ ] `TypeError`
+Tuples compare **lexicographically**: first by element 0, and only on ties by element 1. That's why tuples are the go-to sort keys.
+:::
+
 ## Practice problems
 
 :::problem basic | Min, max and mean in one return | tuple packing
@@ -439,4 +468,148 @@ print(A.add(A).data, len(A.data), "non-zeros")
 ```
 :::explain
 **Dictionary-of-keys (DOK)** format stores only non-zero entries, keyed by `(row, col)` tuples. Multiplication touches only pairs where A's column index meets a non-zero row of B, so the cost is proportional to the work actually needed, not n³. SciPy offers DOK, COO (lists of `(r, c, v)` tuples) and CSR formats for huge ML feature matrices.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Sort the people | LeetCode 2418 | https://leetcode.com/problems/sort-the-people/
+Given `names` and distinct `heights`, return the names sorted by height, **tallest first**. Use `zip` to pair them as tuples.
+:::starter
+```python norun
+def sort_people(names, heights):
+    pass
+```
+:::tests
+```python norun
+assert sort_people(["Mary", "John", "Emma"], [180, 165, 170]) == ["Mary", "Emma", "John"]
+assert sort_people(["Alice", "Bob", "Bob"], [155, 185, 150]) == ["Bob", "Alice", "Bob"]
+assert sort_people(["X"], [1]) == ["X"]
+```
+:::solution
+```python
+def sort_people(names, heights):
+    return [name for height, name in sorted(zip(heights, names), reverse=True)]
+
+print(sort_people(["Mary", "John", "Emma"], [180, 165, 170]))
+```
+:::explain
+`zip(heights, names)` builds `(height, name)` tuples, so sorting compares heights first (they're distinct, so the names never decide). `reverse=True` gives tallest first, and tuple **unpacking** in the comprehension pulls the names back out. This "decorate, sort, undecorate" pattern pre-dates `key=` but is still handy.
+:::complexity
+O(n log n).
+:::end
+
+:::program basic | Destination city | LeetCode 1436 | https://leetcode.com/problems/destination-city/
+Given direct routes `paths[i] = (from, to)` forming a single line with no loops, return the city with **no outgoing** route.
+:::starter
+```python norun
+def dest_city(paths):
+    pass
+```
+:::tests
+```python norun
+assert dest_city([("London", "New York"), ("New York", "Lima"), ("Lima", "Sao Paulo")]) == "Sao Paulo"
+assert dest_city([["B", "C"], ["D", "B"], ["C", "A"]]) == "A"
+assert dest_city([("A", "Z")]) == "Z"
+```
+:::solution
+```python
+def dest_city(paths):
+    sources = {a for a, _ in paths}
+    return next(b for _, b in paths if b not in sources)
+
+print(dest_city([("London", "New York"), ("New York", "Lima"), ("Lima", "Sao Paulo")]))
+```
+:::explain
+Unpacking each pair into `a, _` keeps the code readable (`_` means "ignored"). The answer is the one destination that never appears as a source. A set gives O(1) lookups, and `next(...)` returns the first match from a generator without building a list.
+:::complexity
+O(n).
+:::end
+
+:::program medium | Queue reconstruction by height | LeetCode 406 | https://leetcode.com/problems/queue-reconstruction-by-height/
+Each person is a pair `(h, k)`: height `h`, with exactly `k` people **in front** who are at least as tall. Reconstruct the queue (returned as a list of lists).
+:::starter
+```python norun
+def reconstruct_queue(people):
+    pass
+```
+:::tests
+```python norun
+assert reconstruct_queue([[7, 0], [4, 4], [7, 1], [5, 0], [6, 1], [5, 2]]) == [[5, 0], [7, 0], [5, 2], [6, 1], [4, 4], [7, 1]]
+assert reconstruct_queue([[6, 0], [5, 0], [4, 0], [3, 2], [2, 2], [1, 4]]) == [[4, 0], [5, 0], [2, 2], [3, 2], [1, 4], [6, 0]]
+assert reconstruct_queue([]) == []
+```
+:::hint
+Sort by height **descending**, and by `k` ascending for equal heights. Then insert each person at index `k`. Everyone already placed is at least as tall, so the insertion index is exactly their `k`.
+:::solution
+```python
+def reconstruct_queue(people):
+    queue = []
+    for h, k in sorted(people, key=lambda p: (-p[0], p[1])):
+        queue.insert(k, [h, k])
+    return queue
+
+print(reconstruct_queue([[7, 0], [4, 4], [7, 1], [5, 0], [6, 1], [5, 2]]))
+```
+:::explain
+Processing **tall people first** is the key insight: shorter people inserted later are invisible to taller ones (they don't count towards anyone's `k`), so inserting at position `k` stays correct forever. The tuple key `(-h, k)` encodes "height descending, then k ascending" in one sort. It's a greedy algorithm built on tuple ordering.
+:::trace
+| person | queue after insert at k |
+|---|---|
+| [7,0] | [[7,0]] |
+| [7,1] | [[7,0],[7,1]] |
+| [6,1] | [[7,0],[6,1],[7,1]] |
+| [5,0] | [[5,0],[7,0],[6,1],[7,1]] |
+| [5,2] | [[5,0],[7,0],[5,2],[6,1],[7,1]] |
+| [4,4] | [[5,0],[7,0],[5,2],[6,1],[4,4],[7,1]] |
+:::complexity
+O(n²) because of list inserts. That's fine for n ≤ 2000.
+:::end
+
+:::program hard | The skyline problem | LeetCode 218 | https://leetcode.com/problems/the-skyline-problem/
+Buildings are `(left, right, height)`. Return the skyline's key points `[x, height]` where the outline changes height.
+
+```text
+[[2,9,10],[3,7,15],[5,12,12],[15,20,10],[19,24,8]]
+-> [[2,10],[3,15],[7,12],[12,0],[15,10],[20,8],[24,0]]
+```
+:::starter
+```python norun
+def get_skyline(buildings):
+    pass
+```
+:::tests
+```python norun
+assert get_skyline([[2, 9, 10], [3, 7, 15], [5, 12, 12], [15, 20, 10], [19, 24, 8]]) == [[2, 10], [3, 15], [7, 12], [12, 0], [15, 10], [20, 8], [24, 0]]
+assert get_skyline([[0, 2, 3], [2, 5, 3]]) == [[0, 3], [5, 0]]
+assert get_skyline([[1, 2, 1], [1, 2, 2], [1, 2, 3]]) == [[1, 3], [2, 0]]
+assert get_skyline([]) == []
+```
+:::hint
+Create **events** as tuples: `(left, -height, right)` for a building starting, and `(right, 0, 0)` for a potential end. Sorting the tuples processes taller starts first at the same x. Keep a max-heap of `(-height, right)` and lazily pop buildings whose `right <= x`.
+:::solution
+```python
+import heapq
+
+def get_skyline(buildings):
+    events = sorted([(l, -h, r) for l, r, h in buildings] + [(r, 0, 0) for _, r, _ in buildings])
+    result = []
+    heap = [(0, float("inf"))]                  # (-height, right): ground level lasts forever
+    for x, neg_h, r in events:
+        while heap[0][1] <= x:                  # remove buildings that ended at or before x
+            heapq.heappop(heap)
+        if neg_h:
+            heapq.heappush(heap, (neg_h, r))
+        height = -heap[0][0]
+        if not result or result[-1][1] != height:
+            result.append([x, height])
+    return result
+
+print(get_skyline([[2, 9, 10], [3, 7, 15], [5, 12, 12], [15, 20, 10], [19, 24, 8]]))
+```
+:::explain
+A **sweep line** moves left to right over the events. Tuple ordering does the subtle work: at the same `x`, `(x, -15, …)` sorts before `(x, -10, …)` (the taller start first), and starts (negative) come before ends (0), so touching buildings don't create a fake dip to 0. The heap's top is the current tallest **active** building, and outdated ones are removed lazily. A key point is recorded only when the max height changes.
+:::complexity
+O(n log n).
 :::end
