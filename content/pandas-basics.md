@@ -279,6 +279,50 @@ print(pd.__version__)
 | 9 | Reading IDs or zip codes as ints (losing leading zeros) | `dtype={"zip": str}` |
 | 10 | Mixed types in an object column | `pd.to_numeric(errors="coerce")` |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+import pandas as pd
+s = pd.Series([10, 20, 30], index=[2, 0, 1])
+print(s[0], s.iloc[0], s.loc[1])
+```
+What prints?
+- [x] `20 10 30`
+- [ ] `10 10 20`
+- [ ] `10 20 30`
+With an integer index, `s[0]` is **label-based** (label 0 → 20). `iloc[0]` is the first position (10), and `loc[1]` is label 1 (30). Always say `loc` or `iloc` explicitly.
+:::
+
+:::quiz
+```python
+import pandas as pd
+df = pd.DataFrame({"g": ["a", "b", "a", "b"], "x": [1, 2, 3, 4]})
+print(df.groupby("g")["x"].sum().tolist(), df.groupby("g")["x"].transform("sum").tolist())
+```
+What prints?
+- [ ] `[4, 6] [4, 6]`
+- [x] `[4, 6] [4, 6, 4, 6]`
+- [ ] `[4, 6, 4, 6] [4, 6]`
+An aggregation returns **one row per group**. `transform` returns a result **aligned to the original rows**, which makes it perfect for "each row's share of its group" or for filling with group means.
+:::
+
+:::quiz
+```python
+import pandas as pd
+import numpy as np
+s = pd.Series([1, np.nan, 3])
+print(s.sum(), s.mean(), s.count(), len(s))
+```
+What prints?
+- [x] `4.0 2.0 2 3`
+- [ ] `nan nan 2 3`
+- [ ] `4.0 1.333 3 3`
+Pandas reductions **skip NaN** by default (`skipna=True`): the mean is (1+3)/2. `count()` counts the non-missing values, while `len` counts every row. NumPy's `np.sum` on a raw array would give `nan`.
+:::
+
 ## Practice problems
 
 :::problem basic | Department report | groupby + named aggregation
@@ -455,4 +499,166 @@ print(summary)
 ```
 :::explain
 Classic **sessionisation**: sort by user and time, compute the gap to the previous event **within each user** (`groupby().diff()`), mark the session starts with a boolean, and turn those flags into ids with a **cumulative sum** per user (True counts as 1). Every step is vectorised, so the same code processes millions of events. Analytics pipelines (and SQL window functions) use exactly this trick.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Recyclable and low fat products | LeetCode 1757 | https://leetcode.com/problems/recyclable-and-low-fat-products/
+`products` has columns `product_id`, `low_fats`, `recyclable` ('Y' or 'N'). Return a DataFrame with just `product_id` for the products that are both low fat and recyclable.
+:::starter
+```python norun
+import pandas as pd
+
+def find_products(products):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+df = pd.DataFrame({"product_id": [0, 1, 2, 3, 4], "low_fats": list("YYNYN"), "recyclable": list("NYYYN")})
+out = find_products(df)
+assert list(out.columns) == ["product_id"]
+assert out["product_id"].tolist() == [1, 3]
+assert df.shape == (5, 3)
+```
+:::solution
+```python
+import pandas as pd
+
+def find_products(products):
+    mask = (products["low_fats"] == "Y") & (products["recyclable"] == "Y")   # parentheses!
+    return products.loc[mask, ["product_id"]]          # a list keeps it a DataFrame
+
+df = pd.DataFrame({"product_id": [0, 1, 2], "low_fats": list("YYN"), "recyclable": list("NYY")})
+print(find_products(df))
+```
+:::explain
+Combine boolean masks with `&`, `|` and `~`, never `and`/`or` (those try to turn a whole Series into one bool and raise). Each comparison needs **parentheses**, because `&` binds tighter than `==`. Selecting `["product_id"]` (a list) returns a DataFrame, while `"product_id"` would return a Series.
+:::complexity
+O(n).
+:::end
+
+:::program basic | Calculate special bonus | LeetCode 1873 | https://leetcode.com/problems/calculate-special-bonus/
+An employee gets a bonus equal to 100% of their salary if their `employee_id` is odd **and** their name doesn't start with 'M'; otherwise the bonus is 0. Return `employee_id, bonus` sorted by `employee_id`.
+:::starter
+```python norun
+import pandas as pd
+
+def calculate_special_bonus(employees):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+df = pd.DataFrame({"employee_id": [2, 3, 7, 8, 9], "name": ["Meir", "Michael", "Addilyn", "Juan", "Kannon"],
+                   "salary": [3000, 3800, 7400, 6100, 7700]})
+out = calculate_special_bonus(df.sample(frac=1, random_state=1))
+assert list(out.columns) == ["employee_id", "bonus"]
+assert out["employee_id"].tolist() == [2, 3, 7, 8, 9]
+assert out["bonus"].tolist() == [0, 0, 7400, 0, 7700]
+```
+:::solution
+```python
+import numpy as np
+import pandas as pd
+
+def calculate_special_bonus(employees):
+    ok = (employees["employee_id"] % 2 == 1) & ~employees["name"].str.startswith("M")
+    out = employees.assign(bonus=np.where(ok, employees["salary"], 0))
+    return out[["employee_id", "bonus"]].sort_values("employee_id")
+
+df = pd.DataFrame({"employee_id": [2, 3, 7], "name": ["Meir", "Michael", "Addilyn"], "salary": [3000, 3800, 7400]})
+print(calculate_special_bonus(df))
+```
+:::explain
+`np.where(cond, a, b)` is the vectorised if/else: it picks `salary` where the condition is True and 0 elsewhere, with no `apply` or loop. `.str.startswith` is the vectorised string method, and `~` negates the mask. `assign` returns a new frame, so the input isn't modified. The test shuffles the input to make sure you sort.
+:::complexity
+O(n log n) for the sort.
+:::end
+
+:::program medium | Second highest salary | LeetCode 176 | https://leetcode.com/problems/second-highest-salary/
+Return a one-row DataFrame with column `SecondHighestSalary` holding the second highest **distinct** salary, or null (NaN/None) if there isn't one.
+:::starter
+```python norun
+import pandas as pd
+
+def second_highest_salary(employee):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+mk = lambda xs: pd.DataFrame({"id": range(1, len(xs) + 1), "salary": xs})
+out = second_highest_salary(mk([100, 200, 300]))
+assert list(out.columns) == ["SecondHighestSalary"] and out.shape == (1, 1)
+assert out.iloc[0, 0] == 200
+assert pd.isna(second_highest_salary(mk([100])).iloc[0, 0])
+assert pd.isna(second_highest_salary(mk([100, 100])).iloc[0, 0])
+assert second_highest_salary(mk([300, 300, 200, 200])).iloc[0, 0] == 200
+```
+:::hint
+`drop_duplicates()` (or `unique()`) first, then sort descending. Handle the "fewer than 2 distinct values" case explicitly.
+:::solution
+```python
+import pandas as pd
+
+def second_highest_salary(employee):
+    distinct = employee["salary"].drop_duplicates().nlargest(2)
+    value = distinct.iloc[1] if len(distinct) == 2 else None
+    return pd.DataFrame({"SecondHighestSalary": [value]})
+
+print(second_highest_salary(pd.DataFrame({"id": [1, 2, 3], "salary": [100, 200, 300]})))
+```
+:::explain
+"Second highest" has two edge cases that most first attempts fail: **ties** (`[300, 300, 200]` should give 200, not 300), handled by de-duplicating first, and **missing** (only one distinct value), which must give null rather than raise `IndexError`. `nlargest(2)` is O(n), cheaper than a full sort.
+:::complexity
+O(n).
+:::end
+
+:::program hard | Department top three salaries | LeetCode 185 | https://leetcode.com/problems/department-top-three-salaries/
+`employee(id, name, salary, departmentId)` and `department(id, name)`. Return every employee whose salary is among the **top three distinct** salaries of their department, with columns `Department, Employee, Salary`.
+:::starter
+```python norun
+import pandas as pd
+
+def top_three_salaries(employee, department):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+emp = pd.DataFrame({"id": range(1, 8), "name": ["Joe", "Henry", "Sam", "Max", "Janet", "Randy", "Will"],
+                    "salary": [85000, 80000, 60000, 90000, 69000, 85000, 70000], "departmentId": [1, 2, 2, 1, 1, 1, 1]})
+dep = pd.DataFrame({"id": [1, 2], "name": ["IT", "Sales"]})
+out = top_three_salaries(emp, dep)
+assert list(out.columns) == ["Department", "Employee", "Salary"]
+got = sorted(map(tuple, out.values.tolist()))
+assert got == [("IT", "Joe", 85000), ("IT", "Max", 90000), ("IT", "Randy", 85000), ("IT", "Will", 70000),
+               ("Sales", "Henry", 80000), ("Sales", "Sam", 60000)]
+```
+:::hint
+Within each department, use `groupby("departmentId")["salary"].rank(method="dense", ascending=False)`: dense ranking gives tied salaries the same rank with no gaps. Keep ranks ≤ 3, then merge to get the department names.
+:::solution
+```python
+import pandas as pd
+
+def top_three_salaries(employee, department):
+    e = employee.assign(rnk=employee.groupby("departmentId")["salary"]
+                                    .rank(method="dense", ascending=False))
+    top = e[e["rnk"] <= 3]
+    merged = top.merge(department, left_on="departmentId", right_on="id",
+                       suffixes=("_emp", "_dep"))
+    return merged.rename(columns={"name_dep": "Department", "name_emp": "Employee",
+                                  "salary": "Salary"})[["Department", "Employee", "Salary"]]
+
+emp = pd.DataFrame({"id": [1, 2, 3, 4], "name": ["Joe", "Max", "Randy", "Will"],
+                    "salary": [85000, 90000, 85000, 70000], "departmentId": [1, 1, 1, 1]})
+print(top_three_salaries(emp, pd.DataFrame({"id": [1], "name": ["IT"]})))
+```
+:::explain
+It's the SQL `DENSE_RANK() OVER (PARTITION BY …)` translated to pandas. `groupby(...).rank` is a **transform**, so it returns one rank per original row. `method="dense"` matters: with salaries 90k, 85k, 85k, 70k it gives 1, 2, 2, 3, so Will (70k) qualifies. `"min"` would give 1, 2, 2, 4 and drop him. Both tables have `id` and `name` columns, so `suffixes` keeps them apart before renaming.
+:::complexity
+O(n log n) for the ranking.
 :::end

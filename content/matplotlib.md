@@ -460,6 +460,61 @@ plt.show()
 | 9 | Too many pie slices | a bar chart |
 | 10 | Unlabelled axes and units | always set the labels with units |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+fig, axes = plt.subplots(2, 3)
+print(type(axes).__name__, axes.shape, len(fig.axes))
+```
+What prints?
+- [x] `ndarray (2, 3) 6`
+- [ ] `list (2, 3) 6`
+- [ ] `Axes (6,) 1`
+`plt.subplots(nrows, ncols)` returns a **NumPy array** of Axes with shape `(2, 3)`. Use `axes.flat` to loop over them. With `(1, 1)` you get a single Axes object instead, unless you pass `squeeze=False`.
+:::
+
+:::quiz
+```python
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.plot([1, 2, 3], label="a")
+ax.plot([3, 2, 1])
+ax.bar([0, 1], [5, 6])
+print(len(ax.lines), len(ax.patches), ax.get_legend())
+```
+What prints?
+- [ ] `2 2 Legend`
+- [x] `2 2 None`
+- [ ] `3 2 None`
+Each `plot` call adds one `Line2D` to `ax.lines`, and each bar is a `Rectangle` in `ax.patches`. Labels don't create a legend until you call `ax.legend()`, so `get_legend()` is `None`.
+:::
+
+:::quiz
+```python
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.set_xlim(0, 10)
+ax.invert_yaxis()
+ax.plot([0, 5], [1, 2])
+print(tuple(map(float, ax.get_xlim())), ax.yaxis_inverted())
+```
+What prints?
+- [x] `(0.0, 10.0) True`
+- [ ] `(0.0, 5.0) True`
+- [ ] `(-0.25, 5.25) False`
+Setting limits explicitly **turns off autoscaling** for that axis, so plotting later doesn't change the x-range. The inverted y-axis stays inverted when autoscaling adds data.
+:::
+
 ## Practice problems
 
 :::problem basic | Your first complete chart | line, labels, legend, grid
@@ -671,4 +726,205 @@ plt.show()
 ```
 :::explain
 The bowl is 10× steeper along w₂, so the safe learning rate is limited by that direction: the w₂ update multiplies the error by (1 − 20·lr) each step. At lr = 0.02 that factor is 0.6 (smooth but slow along w₁). At 0.09 it's −0.8 (it overshoots and zig-zags across the valley). At 0.105 it's −1.1, so |factor| > 1 and it **diverges**. Seeing the contours makes the classic "ill-conditioning" lesson obvious. It's why optimisers like Adam rescale each direction.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Multi-line chart with legend | Real-world task
+Write `line_chart(x, series, title)`, where `series` is a dict mapping names to y-lists. Draw one line per series with markers, a title, x/y labels (`"x"` and `"value"`), a grid and a legend. Return `(fig, ax)`.
+:::starter
+```python norun
+import matplotlib.pyplot as plt
+
+def line_chart(x, series, title):
+    pass
+```
+:::tests
+```python norun
+fig, ax = line_chart([1, 2, 3], {"train": [0.9, 0.5, 0.3], "val": [1.0, 0.7, 0.6]}, "Loss")
+assert ax.get_title() == "Loss" and ax.get_xlabel() == "x" and ax.get_ylabel() == "value"
+assert len(ax.lines) == 2
+assert [t.get_text() for t in ax.get_legend().get_texts()] == ["train", "val"]
+assert ax.lines[1].get_ydata().tolist() == [1.0, 0.7, 0.6]
+assert all(l.get_marker() not in (None, "None", "") for l in ax.lines)
+assert any(g.get_visible() for g in ax.get_xgridlines())
+```
+:::solution
+```python plot
+import matplotlib.pyplot as plt
+
+def line_chart(x, series, title):
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+    for name, ys in series.items():
+        ax.plot(x, ys, marker="o", label=name)       # label= feeds the legend
+    ax.set(title=title, xlabel="x", ylabel="value")
+    ax.grid(alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    return fig, ax
+
+fig, ax = line_chart([1, 2, 3, 4], {"train": [0.9, 0.5, 0.3, 0.2], "val": [1.0, 0.7, 0.6, 0.58]}, "Loss")
+plt.show()
+```
+:::explain
+This is the **object-oriented** API: create `fig, ax`, call methods on `ax`, and return both so the caller (or a test) can inspect or save them. Artists are introspectable: `ax.lines`, `ax.get_title()`, `legend.get_texts()`. That's how plotting code is unit-tested in real projects. `ax.set(...)` sets several properties in one call.
+:::complexity
+O(total points).
+:::end
+
+:::program basic | Sorted bar chart with value labels | Real-world task
+Write `ranked_bars(data)`, where `data` maps a category to a value. Draw horizontal bars sorted with the **largest at the top**, label each bar with its value, and remove the top and right spines. Return `(fig, ax)`.
+:::starter
+```python norun
+import matplotlib.pyplot as plt
+
+def ranked_bars(data):
+    pass
+```
+:::tests
+```python norun
+fig, ax = ranked_bars({"pandas": 42, "numpy": 57, "polars": 18, "duckdb": 25})
+assert len(ax.patches) == 4
+labels = [t.get_text() for t in ax.get_yticklabels()]
+widths = [p.get_width() for p in ax.patches]
+order = sorted(zip([p.get_y() for p in ax.patches], widths))      # bottom -> top
+assert [w for _, w in order] == [18, 25, 42, 57]
+assert sorted(t.get_text() for t in ax.texts) == ["18", "25", "42", "57"]
+assert not ax.spines["top"].get_visible() and not ax.spines["right"].get_visible()
+```
+:::hint
+Sort the items **ascending**, because `barh` draws the first bar at the bottom. `ax.bar_label(bars)` adds the value labels.
+:::solution
+```python plot
+import matplotlib.pyplot as plt
+
+def ranked_bars(data):
+    items = sorted(data.items(), key=lambda kv: kv[1])     # ascending: barh draws bottom-up
+    names, vals = zip(*items)
+    fig, ax = plt.subplots(figsize=(6, 3))
+    bars = ax.barh(names, vals, color="#b5462f")
+    ax.bar_label(bars, padding=3)                          # one Text per bar
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.set_xlabel("stars (k)")
+    fig.tight_layout()
+    return fig, ax
+
+ranked_bars({"pandas": 42, "numpy": 57, "polars": 18, "duckdb": 25})
+plt.show()
+```
+:::explain
+Horizontal bars suit long category names. The classic trap is that `barh` places index 0 at the **bottom**, so sorting ascending puts the biggest bar on top (or sort descending and call `ax.invert_yaxis()`). `bar_label` (3.4+) replaces the old manual loop of `ax.text` calls. Removing chart junk (the extra spines) is a quick readability win.
+:::complexity
+O(n log n).
+:::end
+
+:::program medium | Small multiples from a DataFrame | Real-world task
+Write `small_multiples(df, ncols=3)`: one line plot per numeric column on a grid with a **shared y-axis**, each titled with the column name, and the unused panels hidden. Return `(fig, axes)`, where axes is the 2-D array.
+:::starter
+```python norun
+import math
+import matplotlib.pyplot as plt
+
+def small_multiples(df, ncols=3):
+    pass
+```
+:::tests
+```python norun
+import numpy as np, pandas as pd
+df = pd.DataFrame(np.arange(40).reshape(8, 5), columns=list("abcde"))
+df["label"] = "x"
+fig, axes = small_multiples(df, ncols=3)
+assert axes.shape == (2, 3)
+vis = [ax for ax in axes.flat if ax.get_visible()]
+assert [ax.get_title() for ax in vis] == ["a", "b", "c", "d", "e"]
+assert not axes.flat[5].get_visible()
+assert vis[0].get_shared_y_axes().joined(vis[0], vis[4])
+assert all(len(ax.lines) == 1 for ax in vis)
+```
+:::solution
+```python plot
+import math
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def small_multiples(df, ncols=3):
+    cols = df.select_dtypes("number").columns
+    nrows = math.ceil(len(cols) / ncols)
+    fig, axes = plt.subplots(nrows, ncols, sharey=True, squeeze=False,
+                             figsize=(3 * ncols, 2.2 * nrows))
+    for ax, col in zip(axes.flat, cols):
+        ax.plot(df.index, df[col])
+        ax.set_title(col)
+    for ax in axes.flat[len(cols):]:
+        ax.set_visible(False)                  # hide the leftover panels
+    fig.tight_layout()
+    return fig, axes
+
+rng = np.random.default_rng(0)
+small_multiples(pd.DataFrame(rng.normal(size=(30, 5)).cumsum(0), columns=list("abcde")))
+plt.show()
+```
+:::explain
+**Small multiples** (one tiny chart per series, on shared axes) are easier to compare than five overlapping lines. `squeeze=False` guarantees a 2-D array even for one row, so `axes.flat` always works. `sharey=True` makes the panels comparable at a glance. `zip` stops at the shorter sequence, and the leftover panels are hidden rather than left as empty boxes. `select_dtypes("number")` skips the text column.
+:::complexity
+O(cells).
+:::end
+
+:::program hard | Annotated confusion-matrix heatmap | ML task
+Write `confusion_heatmap(cm, labels)`. Draw `cm` (a 2-D int array) with `imshow`, add a colorbar, put the class names on both axes, and write each count in its cell, in **white on dark cells and black on light ones** (threshold: half the maximum). Return `(fig, ax)`.
+:::starter
+```python norun
+import numpy as np
+import matplotlib.pyplot as plt
+
+def confusion_heatmap(cm, labels):
+    pass
+```
+:::tests
+```python norun
+import numpy as np
+from matplotlib.colors import to_hex
+cm = np.array([[50, 2, 0], [5, 40, 5], [0, 10, 30]])
+fig, ax = confusion_heatmap(cm, ["cat", "dog", "bird"])
+assert len(ax.images) == 1 and len(fig.axes) == 2                      # heatmap + colorbar
+assert [t.get_text() for t in ax.get_xticklabels()] == ["cat", "dog", "bird"]
+assert [t.get_text() for t in ax.get_yticklabels()] == ["cat", "dog", "bird"]
+texts = {(round(t.get_position()[1]), round(t.get_position()[0])): t for t in ax.texts}
+assert len(texts) == 9 and texts[(1, 2)].get_text() == "5"
+assert to_hex(texts[(0, 0)].get_color()) == "#ffffff" and to_hex(texts[(0, 1)].get_color()) == "#000000"
+assert ax.get_xlabel() == "predicted" and ax.get_ylabel() == "actual"
+```
+:::hint
+`im = ax.imshow(cm, cmap="Reds")`, `fig.colorbar(im, ax=ax)`, then `ax.set_xticks(range(n), labels=labels)`. Loop over `np.ndindex(cm.shape)` and call `ax.text(j, i, ...)`. Note that x is the **column**.
+:::solution
+```python plot
+import numpy as np
+import matplotlib.pyplot as plt
+
+def confusion_heatmap(cm, labels):
+    cm = np.asarray(cm)
+    fig, ax = plt.subplots(figsize=(4.5, 4))
+    im = ax.imshow(cm, cmap="Reds")
+    fig.colorbar(im, ax=ax, fraction=0.046)
+    n = len(labels)
+    ax.set_xticks(range(n), labels=labels)
+    ax.set_yticks(range(n), labels=labels)
+    ax.set(xlabel="predicted", ylabel="actual", title="Confusion matrix")
+    threshold = cm.max() / 2
+    for i, j in np.ndindex(cm.shape):                 # row i = y, column j = x
+        ax.text(j, i, str(cm[i, j]), ha="center", va="center",
+                color="white" if cm[i, j] > threshold else "black")
+    fig.tight_layout()
+    return fig, ax
+
+confusion_heatmap(np.array([[50, 2, 0], [5, 40, 5], [0, 10, 30]]), ["cat", "dog", "bird"])
+plt.show()
+```
+:::explain
+`imshow` draws cell `[i, j]` centred at **x = j, y = i** with the y-axis pointing down, so annotations must use `ax.text(j, i, …)`. Swapping them is the classic bug, and the test checks the text at row 1, column 2. The colorbar is a second Axes on the figure. Choosing the text colour by a threshold keeps the numbers readable on both pale and saturated cells, and it's what `ConfusionMatrixDisplay` does internally.
+:::complexity
+O(n²) artists.
 :::end

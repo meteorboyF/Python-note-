@@ -390,6 +390,54 @@ my_project/
 | 9 | Type hints that lie (never checked) | run mypy in CI |
 | 10 | Bare `except` swallowing errors | specific exceptions + logging |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+def add(item, bucket=[]):
+    bucket.append(item)
+    return bucket
+add(1)
+print(add(2))
+```
+Which tool would flag this **before** you ran it?
+- [ ] mypy (a type checker)
+- [x] a linter such as Ruff or pylint (B006 / W0102)
+- [ ] pytest
+It prints `[1, 2]` because the default list is created once and shared between calls. Linters have a rule for **mutable default arguments** (Ruff's B006, pylint's W0102). mypy only checks types, and pytest only catches it if you happen to write that exact test.
+:::
+
+:::quiz
+```python
+import logging
+log = logging.getLogger("demo")
+log.debug("a")
+log.info("b")
+log.warning("c")
+```
+With no logging configuration at all, what is printed (to stderr)?
+- [x] only `c`
+- [ ] `a`, `b`, `c`
+- [ ] nothing
+An unconfigured logger falls back to the **last-resort handler** at level WARNING, so only `c` appears. Call `logging.basicConfig(level=logging.INFO)` once at program start to see `b` too.
+:::
+
+:::quiz
+```python
+from typing import Optional
+def find(xs: list[int], t: int) -> Optional[int]:
+    return xs.index(t) if t in xs else None
+print(find.__annotations__["return"], find(["a"], "a"))
+```
+What prints?
+- [x] `int | None 0`
+- [ ] `TypeError: expected int`
+- [ ] `int | None None`
+Type hints are **not enforced at runtime**: passing strings works fine and returns 0. They're metadata (`__annotations__`) for tools like mypy and IDEs. Since Python 3.14, `Optional[int]` is literally the same object as `int | None` and prints that way (older versions print `typing.Optional[int]`).
+:::
+
 ## Practice problems
 
 :::problem basic | Refactor to idiomatic Python | idioms
@@ -607,4 +655,229 @@ asyncio.run(crawl())
 ```
 :::explain
 `gather` starts all 20 coroutines, but the `Semaphore(5)` acts as a turnstile: only five may be inside `async with sem` at a time, which is how polite crawlers and API clients respect rate limits. `wait_for` cancels anything slower than 0.5 s. Updating the shared `stats` dict is safe without locks because asyncio runs everything in **one thread**, so switches only happen at `await` points. Total time ≈ (20 pages ÷ 5 slots) × the typical latency, far less than running them one by one.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | A timing context manager | Real-world task
+Write a context manager `timer(label, sink=print, clock=time.perf_counter)` that measures the block and calls `sink(f"{label}: {ms:.1f} ms")`, **even if the block raises** (the exception must still propagate). Inject `clock` so it can be tested deterministically.
+:::starter
+```python norun
+import time
+from contextlib import contextmanager
+
+@contextmanager
+def timer(label, sink=print, clock=time.perf_counter):
+    pass
+```
+:::tests
+```python norun
+ticks = iter([1.0, 1.25])
+out = []
+with timer("load", sink=out.append, clock=lambda: next(ticks)):
+    pass
+assert out == ["load: 250.0 ms"]
+ticks = iter([0.0, 0.002]); out.clear()
+def boom():
+    with timer("boom", sink=out.append, clock=lambda: next(ticks)):
+        raise KeyError("x")
+assert raises(KeyError, boom)
+assert out == ["boom: 2.0 ms"]
+```
+:::solution
+```python
+import time
+from contextlib import contextmanager
+
+@contextmanager
+def timer(label, sink=print, clock=time.perf_counter):
+    start = clock()
+    try:
+        yield
+    finally:                                   # runs on success AND on exception
+        sink(f"{label}: {(clock() - start) * 1000:.1f} ms")
+
+with timer("sum"):
+    sum(range(100_000))
+```
+:::explain
+`@contextmanager` turns a generator into a context manager: code before `yield` is `__enter__`, and code after it is `__exit__`. Wrapping the `yield` in `try/finally` makes the report run even when the block raises, and since nothing catches the exception, it still propagates. **Dependency injection** of `clock` and `sink` (instead of hard-coding `time` and `print`) is what makes the test deterministic: a fake clock returns exact ticks.
+:::complexity
+O(1) overhead.
+:::end
+
+:::program medium | Log file summariser | Real-world task
+Parse lines like `2024-05-01 12:00:03 ERROR db: timeout after 30s`. Return a dict containing `counts` (per level), `top_errors` (the 2 most common ERROR **sources**, as `(source, count)`), and `bad_lines` (the count of lines that don't match the format). Use a compiled regex with named groups.
+:::starter
+```python norun
+import re
+from collections import Counter
+
+def summarise(lines):
+    pass
+```
+:::tests
+```python norun
+log = """2024-05-01 12:00:03 ERROR db: timeout after 30s
+2024-05-01 12:00:04 INFO api: GET /users 200
+garbage line
+2024-05-01 12:00:05 ERROR db: connection reset
+2024-05-01 12:00:06 WARNING cache: miss rate 40%
+2024-05-01 12:00:07 ERROR auth: bad token
+2024-05-01 12:00:08 ERROR db: timeout after 30s
+
+2024-05-01 12:00:09 INFO api: GET /items 200""".splitlines()
+r = summarise(log)
+assert r["counts"] == {"ERROR": 4, "INFO": 2, "WARNING": 1}
+assert r["top_errors"] == [("db", 3), ("auth", 1)]
+assert r["bad_lines"] == 1
+assert summarise([]) == {"counts": {}, "top_errors": [], "bad_lines": 0}
+```
+:::hint
+Use `re.compile(r"^(?P<date>\S+) (?P<time>\S+) (?P<level>[A-Z]+) (?P<source>\w+): (?P<msg>.*)$")`. Skip blank lines without counting them as bad.
+:::solution
+```python
+import re
+from collections import Counter
+
+LINE = re.compile(r"^(?P<date>\d{4}-\d\d-\d\d) (?P<time>[\d:]+) (?P<level>[A-Z]+) (?P<source>\w+): (?P<msg>.*)$")
+
+def summarise(lines):
+    levels, errors, bad = Counter(), Counter(), 0
+    for line in lines:
+        if not line.strip():
+            continue
+        m = LINE.match(line)
+        if m is None:
+            bad += 1
+            continue
+        levels[m["level"]] += 1
+        if m["level"] == "ERROR":
+            errors[m["source"]] += 1
+    return {"counts": dict(levels), "top_errors": errors.most_common(2), "bad_lines": bad}
+
+print(summarise(["2024-05-01 12:00:03 ERROR db: timeout", "oops"]))
+```
+:::explain
+Compile the regex **once**, at module level. **Named groups** (`m["level"]`) make it self-documenting and survive reordering. Two `Counter`s do the tallying, and `most_common(k)` gives the top-k. Real pipelines must be **robust to junk**: count and skip malformed lines instead of crashing on line 3 million. Since the function takes an iterable of lines, you can pass it an open file and it streams in O(1) memory.
+:::complexity
+O(total characters) time, O(distinct levels + sources) memory.
+:::end
+
+:::program medium | A tiny CLI with argparse | Real-world task
+Write `parse(argv)` for a tool `resize`: a positional `paths` (1 or more), `--width/-w` (a required int > 0), an optional `--quality` (an int from 1–100, default 85), and a `--dry-run` flag. Invalid input must raise `SystemExit` (argparse's behaviour).
+:::starter
+```python norun
+import argparse
+
+def parse(argv):
+    pass
+```
+:::tests
+```python norun
+a = parse(["a.png", "b.png", "-w", "640"])
+assert a.paths == ["a.png", "b.png"] and a.width == 640 and a.quality == 85 and a.dry_run is False
+b = parse(["x.jpg", "--width", "10", "--quality", "100", "--dry-run"])
+assert b.quality == 100 and b.dry_run is True
+import contextlib, io
+with contextlib.redirect_stderr(io.StringIO()):
+    assert raises(SystemExit, parse, ["a.png"])                   # missing --width
+    assert raises(SystemExit, parse, ["-w", "5"])                 # no paths
+    assert raises(SystemExit, parse, ["a.png", "-w", "0"])         # not > 0
+    assert raises(SystemExit, parse, ["a.png", "-w", "5", "--quality", "101"])
+```
+:::solution
+```python
+import argparse
+
+def positive_int(text):
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {value}")
+    return value
+
+def parse(argv):
+    p = argparse.ArgumentParser(prog="resize", description="Resize images.")
+    p.add_argument("paths", nargs="+", help="image files")
+    p.add_argument("-w", "--width", type=positive_int, required=True)
+    p.add_argument("--quality", type=int, choices=range(1, 101), default=85, metavar="1-100")
+    p.add_argument("--dry-run", action="store_true", help="show what would happen")
+    return p.parse_args(argv)
+
+print(parse(["a.png", "-w", "640", "--dry-run"]))
+```
+:::explain
+argparse does the validation and the `--help` text for you. `nargs="+"` means one or more, `action="store_true"` makes a flag, and `--dry-run` becomes the attribute `dry_run`. **Custom `type=` functions** are the clean way to validate: raise `ArgumentTypeError` and argparse turns it into a proper usage error (exit code 2). Taking `argv` as a parameter (instead of reading `sys.argv`) is what makes a CLI testable.
+:::complexity
+O(len(argv)).
+:::end
+
+:::program hard | Token-bucket rate limiter | Real-world task
+Implement `TokenBucket(rate, capacity, clock=time.monotonic)`. `allow(cost=1)` returns True and spends tokens if enough are available, otherwise False. Tokens refill continuously at `rate` per second, up to `capacity`. Add `retry_after(cost=1)`, which returns the seconds until `cost` tokens will be available. Use type hints and `__slots__`.
+:::starter
+```python norun
+import time
+
+class TokenBucket:
+    def __init__(self, rate: float, capacity: float, clock=time.monotonic):
+        pass
+```
+:::tests
+```python norun
+now = [0.0]
+b = TokenBucket(rate=2, capacity=4, clock=lambda: now[0])
+assert [b.allow() for _ in range(5)] == [True, True, True, True, False]      # starts full
+assert abs(b.retry_after() - 0.5) < 1e-9
+now[0] = 0.5
+assert b.allow() is True and b.allow() is False
+now[0] = 100.0
+assert b.allow(4) is True and b.allow() is False                             # capped at capacity
+assert b.allow(5) is False and b.retry_after(5) == float("inf")
+assert raises(ValueError, TokenBucket, 0, 1)
+assert not hasattr(b, "__dict__")
+```
+:::hint
+Store `tokens` and `last` (the timestamp). On every call, first **refill**: `tokens = min(capacity, tokens + (now - last) * rate)`, then update `last`. A cost larger than the capacity can never succeed, so `retry_after` should return `inf`.
+:::solution
+```python
+import time
+from typing import Callable
+
+class TokenBucket:
+    __slots__ = ("rate", "capacity", "tokens", "last", "clock")
+
+    def __init__(self, rate: float, capacity: float, clock: Callable[[], float] = time.monotonic) -> None:
+        if rate <= 0 or capacity <= 0:
+            raise ValueError("rate and capacity must be positive")
+        self.rate, self.capacity, self.clock = rate, capacity, clock
+        self.tokens: float = capacity                  # start full: allow an initial burst
+        self.last: float = clock()
+
+    def _refill(self) -> None:
+        now = self.clock()
+        self.tokens = min(self.capacity, self.tokens + (now - self.last) * self.rate)
+        self.last = now
+
+    def allow(self, cost: float = 1) -> bool:
+        self._refill()
+        if cost <= self.tokens:
+            self.tokens -= cost
+            return True
+        return False
+
+    def retry_after(self, cost: float = 1) -> float:
+        self._refill()
+        if cost > self.capacity:
+            return float("inf")
+        return max(0.0, (cost - self.tokens) / self.rate)
+
+b = TokenBucket(rate=5, capacity=2)
+print([b.allow() for _ in range(3)], round(b.retry_after(), 2))
+```
+:::explain
+The token bucket is how real APIs implement rate limits: it allows **bursts** up to `capacity` while enforcing an average of `rate` per second. Refilling **lazily** (computing the tokens from elapsed time when asked) avoids background threads and timers. `time.monotonic` is the correct clock because wall-clock time can jump backwards (NTP, DST). The injected clock makes the tests exact instead of `sleep`-based and flaky. `__slots__` saves memory per instance and forbids typo attributes (`b.tokns = 3` raises).
+:::complexity
+O(1) per call, O(1) memory.
 :::end

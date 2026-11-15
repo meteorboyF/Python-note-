@@ -246,6 +246,51 @@ plt.show()
 | 9 | Mixing naive and tz-aware timestamps | localise everything |
 | 10 | `apply` with Python loops on big frames | vectorise |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+import pandas as pd
+a = pd.DataFrame({"k": [1, 1, 2], "x": [10, 11, 20]})
+b = pd.DataFrame({"k": [1, 1, 3], "y": ["p", "q", "r"]})
+print(len(a.merge(b, on="k")), len(a.merge(b, on="k", how="outer")))
+```
+What prints?
+- [ ] `2 4`
+- [x] `4 6`
+- [ ] `2 5`
+Key 1 appears twice on each side, so the inner join produces 2 × 2 = 4 rows (a **many-to-many explosion**). The outer join adds key 2 (left only) and key 3 (right only): 6 rows. Use `validate="one_to_one"` to catch this.
+:::
+
+:::quiz
+```python
+import pandas as pd
+wide = pd.DataFrame({"id": [1, 2], "q1": [5, 6], "q2": [7, 8]})
+long = wide.melt(id_vars="id", var_name="q", value_name="v")
+print(long.shape, long.values.tolist()[1])
+```
+What prints?
+- [x] `(4, 3) [2, 'q1', 6]`
+- [ ] `(4, 3) [1, 'q2', 7]`
+- [ ] `(2, 4) [2, 6, 8]`
+`melt` stacks the value columns **one column at a time**: first all the `q1` rows (ids 1, 2), then all the `q2` rows. So row 1 is id 2's q1 value.
+:::
+
+:::quiz
+```python
+import pandas as pd
+s = pd.Series(range(6), index=pd.date_range("2024-01-01", periods=6, freq="D"))
+print(s.rolling(3).sum().tolist()[:4], s.rolling("3D").sum().iloc[0])
+```
+What prints?
+- [x] `[nan, nan, 3.0, 6.0] 0.0`
+- [ ] `[0.0, 1.0, 3.0, 6.0] 0.0`
+- [ ] `[nan, nan, 3.0, 6.0] nan`
+A **count** window (`3`) needs 3 values before it produces a result (`min_periods` defaults to the window size). A **time** window (`"3D"`) defaults to `min_periods=1`, so the first row already has a value.
+:::
+
 ## Practice problems
 
 :::problem basic | Customers without orders | left merge + indicator
@@ -385,4 +430,171 @@ print(retention)
 ```
 :::explain
 The pipeline: (1) bucket events by month (`to_period("M")`), (2) the cohort is each user's **first** month (`transform("min")` broadcasts it to all their events), (3) the month offset is the difference of two Periods (a `MonthEnd` offset, whose `.n` is the number of months), (4) count distinct users per (cohort, age) and unstack into a matrix, and (5) divide each row by its month-0 size. Cohort analysis is one of the most common product-analytics deliverables.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Reshape data: pivot | LeetCode 2889 | https://leetcode.com/problems/reshape-data-pivot/
+`weather` has columns `city, month, temperature`. Pivot it so that each row is a **month** and each column is a **city**.
+:::starter
+```python norun
+import pandas as pd
+
+def pivot_table(weather):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+w = pd.DataFrame({"city": ["Jacksonville"] * 3 + ["ElPaso"] * 3, "month": ["January", "February", "March"] * 2,
+                  "temperature": [13, 23, 38, 20, 6, 26]})
+out = pivot_table(w)
+assert sorted(out.columns) == ["ElPaso", "Jacksonville"]
+assert sorted(out.index) == ["February", "January", "March"]
+assert out.loc["March", "ElPaso"] == 26 and out.loc["January", "Jacksonville"] == 13
+```
+:::solution
+```python
+import pandas as pd
+
+def pivot_table(weather):
+    return weather.pivot(index="month", columns="city", values="temperature")
+
+w = pd.DataFrame({"city": ["A", "A", "B", "B"], "month": ["Jan", "Feb"] * 2, "temperature": [1, 2, 3, 4]})
+print(pivot_table(w))
+```
+:::explain
+`pivot(index, columns, values)` is long → wide: the distinct values of `columns` become new column names. It **raises** if any `(index, columns)` pair appears twice, because it won't guess how to combine them. Use `pivot_table(..., aggfunc="mean")` when duplicates are possible.
+:::complexity
+O(n).
+:::end
+
+:::program basic | Reshape data: melt | LeetCode 2890 | https://leetcode.com/problems/reshape-data-melt/
+`report` has columns `product, quarter_1, quarter_2, quarter_3, quarter_4`. Return the long form with columns `product, quarter, sales`.
+:::starter
+```python norun
+import pandas as pd
+
+def melt_table(report):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+r = pd.DataFrame({"product": ["Umbrella", "SleepingBag"], "quarter_1": [417, 800], "quarter_2": [224, 936],
+                  "quarter_3": [379, 93], "quarter_4": [611, 875]})
+out = melt_table(r)
+assert list(out.columns) == ["product", "quarter", "sales"] and out.shape == (8, 3)
+assert out.set_index(["product", "quarter"]).loc[("SleepingBag", "quarter_2"), "sales"] == 936
+```
+:::solution
+```python
+import pandas as pd
+
+def melt_table(report):
+    return report.melt(id_vars="product", var_name="quarter", value_name="sales")
+
+r = pd.DataFrame({"product": ["Umbrella"], "quarter_1": [417], "quarter_2": [224]})
+print(melt_table(r))
+```
+:::explain
+`melt` is the inverse of `pivot`: `id_vars` stay as identifier columns, every other column turns into a (`var_name`, `value_name`) pair. Long ("tidy") data is what `groupby`, plotting libraries and most models want, and wide data is what humans like to read.
+:::complexity
+O(rows × value columns).
+:::end
+
+:::program medium | Group sold products by the date | LeetCode 1484 | https://leetcode.com/problems/group-sold-products-by-the-date/
+`activities(sell_date, product)` may contain duplicates. For each date, return `num_sold` (the distinct products) and `products` (the distinct names sorted and joined with commas), ordered by `sell_date`.
+:::starter
+```python norun
+import pandas as pd
+
+def categorize_products(activities):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+a = pd.DataFrame({"sell_date": ["2020-05-30", "2020-06-01", "2020-06-02", "2020-05-30", "2020-06-01", "2020-06-02", "2020-05-30"],
+                  "product": ["Headphone", "Pencil", "Mask", "Basketball", "Bible", "Mask", "T-Shirt"]})
+out = categorize_products(a)
+assert list(out.columns) == ["sell_date", "num_sold", "products"]
+assert out.values.tolist() == [["2020-05-30", 3, "Basketball,Headphone,T-Shirt"],
+                               ["2020-06-01", 2, "Bible,Pencil"], ["2020-06-02", 1, "Mask"]]
+```
+:::hint
+Use **named aggregation**: `groupby("sell_date").agg(num_sold=("product", "nunique"), products=("product", some_function))`, then `reset_index()`.
+:::solution
+```python
+import pandas as pd
+
+def categorize_products(activities):
+    out = (activities.groupby("sell_date")
+                     .agg(num_sold=("product", "nunique"),
+                          products=("product", lambda s: ",".join(sorted(s.unique()))))
+                     .reset_index())
+    return out.sort_values("sell_date")
+
+a = pd.DataFrame({"sell_date": ["d1", "d1", "d2", "d1"], "product": ["b", "a", "c", "a"]})
+print(categorize_products(a))
+```
+:::explain
+**Named aggregation** (`new_col=(source_col, func)`) names the output columns directly, with no MultiIndex to flatten afterwards. A lambda works for custom reductions such as joining strings: it receives each group's Series. `groupby` sorts the keys by default, and ISO date strings sort correctly as text. The explicit `sort_values` documents that requirement.
+:::complexity
+O(n log n).
+:::end
+
+:::program hard | Human traffic of stadium | LeetCode 601 | https://leetcode.com/problems/human-traffic-of-stadium/
+`stadium(id, visit_date, people)`. Return every row that belongs to a run of **3 or more consecutive ids** each with `people >= 100`, ordered by `visit_date`.
+:::starter
+```python norun
+import pandas as pd
+
+def human_traffic(stadium):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+st = pd.DataFrame({"id": range(1, 9), "visit_date": pd.date_range("2017-01-01", periods=8).astype(str),
+                   "people": [10, 109, 150, 99, 145, 1455, 199, 188]})
+out = human_traffic(st)
+assert list(out.columns) == ["id", "visit_date", "people"]
+assert out["id"].tolist() == [5, 6, 7, 8]
+st2 = st.assign(people=[100, 100, 100, 1, 100, 100, 1, 100])
+assert human_traffic(st2)["id"].tolist() == [1, 2, 3]
+st3 = st.drop(index=5)          # ids 1..5, 7, 8: id 6 is missing, so 5 and 7 aren't consecutive
+assert human_traffic(st3.assign(people=100))["id"].tolist() == [1, 2, 3, 4, 5]
+```
+:::hint
+This is the **gaps-and-islands** trick. Keep the busy rows, sort them by id, then `id - row_number` is constant within each run of consecutive ids. Group by that key and keep the groups with size ≥ 3.
+:::solution
+```python
+import pandas as pd
+
+def human_traffic(stadium):
+    busy = stadium[stadium["people"] >= 100].sort_values("id")
+    island = busy["id"] - range(len(busy))            # constant within a consecutive run
+    size = busy.groupby(island)["id"].transform("size")
+    return busy[size >= 3].sort_values("visit_date")[["id", "visit_date", "people"]]
+
+st = pd.DataFrame({"id": range(1, 9), "visit_date": [f"d{i}" for i in range(1, 9)],
+                   "people": [10, 109, 150, 99, 145, 1455, 199, 188]})
+print(human_traffic(st))
+```
+:::explain
+For consecutive ids 5, 6, 7, 8 at positions 2, 3, 4, 5 of the filtered frame, `id − position` = 3, 3, 3, 3. A gap in the ids (or a removed quiet day) changes the difference, which starts a new **island**. `transform("size")` writes each island's length back onto its rows, so filtering is one mask. The third test removes id 6 entirely to make sure you use the ids, not the row positions in the original frame.
+:::trace
+| id | position | id − position | island size |
+|---|---|---|---|
+| 2 | 0 | 2 | 2 |
+| 3 | 1 | 2 | 2 |
+| 5 | 2 | 3 | 4 ✔ |
+| 6 | 3 | 3 | 4 ✔ |
+| 7 | 4 | 3 | 4 ✔ |
+| 8 | 5 | 3 | 4 ✔ |
+:::complexity
+O(n log n).
 :::end

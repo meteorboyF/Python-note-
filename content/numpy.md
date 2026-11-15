@@ -283,6 +283,54 @@ print((e / e.sum(axis=1, keepdims=True)).round(3))
 | 9 | `np.empty` assumed to be zeros | it's uninitialised: use `zeros` |
 | 10 | `A * B` vs `A @ B` | `*` is element-wise, `@` is a matrix product |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+import numpy as np
+a = np.arange(6)
+b = a[1:4]
+b[0] = 99
+c = a[[1, 2]]
+c[0] = -1
+print(a)
+```
+What prints?
+- [x] `[ 0 99  2  3  4  5]`
+- [ ] `[ 0 -1  2  3  4  5]`
+- [ ] `[0 1 2 3 4 5]`
+A **slice** is a view, so writing through `b` changes `a`. **Fancy indexing** with a list always makes a copy, so writing to `c` leaves `a` alone.
+:::
+
+:::quiz
+```python
+import numpy as np
+x = np.ones((3, 1))
+y = np.arange(4)
+print((x + y).shape, (x * y).sum())
+```
+What prints?
+- [ ] `(3, 4) 6.0`
+- [x] `(3, 4) 18.0`
+- [ ] `ValueError: operands could not be broadcast`
+Shapes `(3, 1)` and `(4,)` align from the right: `(3, 1)` vs `(1, 4)` broadcasts to `(3, 4)`. Each row of `x * y` is `[0, 1, 2, 3]` (sum 6), and there are 3 rows, so 18.0 (a float, because `ones` is float).
+:::
+
+:::quiz
+```python
+import numpy as np
+a = np.array([200, 100], dtype=np.uint8)
+print(a + a, a.sum(), a.mean())
+```
+What prints?
+- [x] `[144 200] 300 150.0`
+- [ ] `[400 200] 300 150.0`
+- [ ] `[144 200] 44 150.0`
+Element-wise `uint8` arithmetic **wraps around** silently (400 mod 256 = 144). But `sum()` promotes small integer types to the platform integer, so 300 is correct, and `mean()` uses float64. Overflow traps hit only the element-wise operations.
+:::
+
 ## Practice problems
 
 :::problem basic | Normalise each row to sum 1 | broadcasting, keepdims
@@ -480,4 +528,181 @@ print("weights:", w.round(3), "| train accuracy:", acc)
 ```
 :::explain
 The whole dataset is processed in one matrix product per step. The binary cross-entropy gradient simplifies beautifully to `Xᵀ(p − y)/n`. `np.c_` / `np.r_` are concise column/row concatenators, and the `1e-12` guards against `log(0)`. This is exactly what `sklearn.linear_model.LogisticRegression` optimises (with better solvers and regularisation).
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Reshape the matrix | LeetCode 566 | https://leetcode.com/problems/reshape-the-matrix/
+Reshape a 2-D list `mat` into `r × c` (row-major). If it's impossible, return the original. Return nested Python lists.
+:::starter
+```python norun
+import numpy as np
+
+def matrix_reshape(mat, r, c):
+    pass
+```
+:::tests
+```python norun
+assert matrix_reshape([[1, 2], [3, 4]], 1, 4) == [[1, 2, 3, 4]]
+assert matrix_reshape([[1, 2], [3, 4]], 2, 4) == [[1, 2], [3, 4]]
+assert matrix_reshape([[1, 2, 3, 4]], 2, 2) == [[1, 2], [3, 4]]
+assert matrix_reshape([[1], [2], [3], [4], [5], [6]], 3, 2) == [[1, 2], [3, 4], [5, 6]]
+assert type(matrix_reshape([[1, 2]], 2, 1)[0][0]) is int
+```
+:::solution
+```python
+import numpy as np
+
+def matrix_reshape(mat, r, c):
+    a = np.array(mat)
+    if a.size != r * c:
+        return mat
+    return a.reshape(r, c).tolist()     # tolist() converts to plain Python ints
+
+print(matrix_reshape([[1, 2], [3, 4]], 1, 4))
+```
+:::explain
+`reshape` only reinterprets the **shape** metadata over the same row-major buffer, so it is O(1) when it can return a view. The only rule is that the sizes must match (`-1` lets NumPy infer one dimension). `.tolist()` matters: it converts `np.int64` back to `int`, which is what the last test checks and what JSON serialisation needs.
+:::complexity
+O(r·c) for building and converting the lists. The reshape itself is O(1).
+:::end
+
+:::program basic | Matrix diagonal sum | LeetCode 1572 | https://leetcode.com/problems/matrix-diagonal-sum/
+Sum the primary and secondary diagonals of a square matrix, counting the centre element only once. No Python loops.
+:::starter
+```python norun
+import numpy as np
+
+def diagonal_sum(mat):
+    pass
+```
+:::tests
+```python norun
+assert diagonal_sum([[1, 2, 3], [4, 5, 6], [7, 8, 9]]) == 25
+assert diagonal_sum([[1, 1, 1, 1]] * 4) == 8
+assert diagonal_sum([[5]]) == 5
+assert diagonal_sum([[1, 2], [3, 4]]) == 10
+```
+:::solution
+```python
+import numpy as np
+
+def diagonal_sum(mat):
+    a = np.asarray(mat)
+    n = len(a)
+    total = np.trace(a) + np.trace(np.fliplr(a))     # main + anti-diagonal
+    if n % 2:
+        total -= a[n // 2, n // 2]                    # the centre was counted twice
+    return int(total)
+
+print(diagonal_sum([[1, 2, 3], [4, 5, 6], [7, 8, 9]]))
+```
+:::explain
+`np.trace` sums the main diagonal, and `np.fliplr` mirrors left↔right, turning the anti-diagonal into the main one. `fliplr` returns a **view** (negative stride), so no data is copied. An equivalent with fancy indexing: `i = np.arange(n); a[i, i].sum() + a[i, n - 1 - i].sum()`.
+:::complexity
+O(n).
+:::end
+
+:::program medium | Matrix block sum (2-D prefix sums) | LeetCode 1314 | https://leetcode.com/problems/matrix-block-sum/
+For each cell, sum all values within `k` rows and columns of it (clipped at the edges). Vectorise it with `np.cumsum` instead of nested loops.
+:::starter
+```python norun
+import numpy as np
+
+def matrix_block_sum(mat, k):
+    pass
+```
+:::tests
+```python norun
+assert matrix_block_sum([[1, 2, 3], [4, 5, 6], [7, 8, 9]], 1) == [[12, 21, 16], [27, 45, 33], [24, 39, 28]]
+assert matrix_block_sum([[1, 2, 3], [4, 5, 6], [7, 8, 9]], 2) == [[45] * 3] * 3
+assert matrix_block_sum([[7]], 3) == [[7]]
+import random
+m = [[random.randint(0, 9) for _ in range(7)] for _ in range(5)]
+brute = [[sum(m[a][b] for a in range(max(0, i-2), min(5, i+3)) for b in range(max(0, j-2), min(7, j+3))) for j in range(7)] for i in range(5)]
+assert matrix_block_sum(m, 2) == brute
+```
+:::hint
+Build `P` with a zero row and column padded on the top and left: `P[i, j]` is the sum of `mat[:i, :j]`. A rectangle's sum is then `P[r2, c2] - P[r1, c2] - P[r2, c1] + P[r1, c1]`, and you can compute all the corners at once with index arrays.
+:::solution
+```python
+import numpy as np
+
+def matrix_block_sum(mat, k):
+    a = np.asarray(mat)
+    m, n = a.shape
+    P = np.zeros((m + 1, n + 1), dtype=a.dtype)
+    P[1:, 1:] = a.cumsum(0).cumsum(1)                  # 2-D prefix sums
+    r1 = np.clip(np.arange(m) - k, 0, m)[:, None]      # column vectors broadcast...
+    r2 = np.clip(np.arange(m) + k + 1, 0, m)[:, None]
+    c1 = np.clip(np.arange(n) - k, 0, n)[None, :]      # ...against row vectors
+    c2 = np.clip(np.arange(n) + k + 1, 0, n)[None, :]
+    return (P[r2, c2] - P[r1, c2] - P[r2, c1] + P[r1, c1]).tolist()
+
+print(matrix_block_sum([[1, 2, 3], [4, 5, 6], [7, 8, 9]], 1))
+```
+:::explain
+**Inclusion-exclusion** on a 2-D prefix table gives any rectangle's sum in O(1): take the big rectangle, remove the strip above and the strip to the left, then add back the corner that was removed twice. `np.clip` handles the edges, and broadcasting a `(m, 1)` index against a `(1, n)` index evaluates all m·n corner lookups in one fancy-indexing expression. The random test compares against a brute-force quadruple loop.
+:::complexity
+O(m·n) regardless of k (the brute force is O(m·n·k²)).
+:::end
+
+:::program hard | Stable softmax + cross-entropy with gradient | ML task
+Implement `softmax(z)` (row-wise, numerically stable) and `cross_entropy(z, y)`, which returns `(mean loss, gradient dL/dz)` for integer labels `y`. Check your gradient against finite differences.
+:::starter
+```python norun
+import numpy as np
+
+def softmax(z):
+    pass
+
+def cross_entropy(z, y):
+    pass
+```
+:::tests
+```python norun
+import numpy as np
+z = np.array([[1.0, 2.0, 3.0], [1000.0, 1000.0, 1000.0]])
+p = softmax(z)
+assert np.allclose(p.sum(axis=1), 1) and np.allclose(p[1], 1 / 3)
+assert not np.isnan(softmax(np.array([[1e4, -1e4]]))).any()
+rng = np.random.default_rng(0)
+z = rng.normal(size=(5, 4)); y = rng.integers(0, 4, size=5)
+loss, g = cross_entropy(z, y)
+assert abs(loss - (-np.log(softmax(z)[np.arange(5), y]).mean())) < 1e-9
+num = np.zeros_like(z); eps = 1e-6
+for idx in np.ndindex(z.shape):
+    zp, zm = z.copy(), z.copy(); zp[idx] += eps; zm[idx] -= eps
+    num[idx] = (cross_entropy(zp, y)[0] - cross_entropy(zm, y)[0]) / (2 * eps)
+assert np.allclose(g, num, atol=1e-6)
+```
+:::hint
+Subtract the row max before `exp`: softmax doesn't change, but overflow becomes impossible. For the loss, use log-softmax `z - max - log(sum(exp(z - max)))`. The gradient of the mean cross-entropy is `(softmax(z) - one_hot(y)) / N`.
+:::solution
+```python
+import numpy as np
+
+def softmax(z):
+    z = z - z.max(axis=1, keepdims=True)         # shift: exp never overflows
+    e = np.exp(z)
+    return e / e.sum(axis=1, keepdims=True)
+
+def cross_entropy(z, y):
+    n = len(z)
+    shifted = z - z.max(axis=1, keepdims=True)
+    log_p = shifted - np.log(np.exp(shifted).sum(axis=1, keepdims=True))   # log-softmax
+    loss = -log_p[np.arange(n), y].mean()        # pick each row's true-class log-prob
+    grad = np.exp(log_p)                         # = softmax(z)
+    grad[np.arange(n), y] -= 1                   # minus one-hot
+    return loss, grad / n
+
+z = np.array([[2.0, 1.0, 0.1]])
+print(softmax(z).round(3), cross_entropy(z, np.array([0]))[0].round(4))
+```
+:::explain
+`exp(1000)` is `inf` in float64, so the naive softmax returns `nan`. Since `softmax(z) = softmax(z − c)` for any constant c, subtracting the row max keeps every exponent ≤ 0. Computing **log-softmax** directly avoids `log(0)`. The gradient `p − one_hot` is a famous simplification: the derivatives of the softmax and the log cancel. The test's **gradient check** (central finite differences) is how you verify backprop code in practice.
+:::complexity
+O(N·C) time and memory.
 :::end

@@ -348,6 +348,47 @@ print(log.pivot_table(index="lr", columns="depth", values="val_acc"))
 | 9 | Class imbalance ignored | stratified splits, better metrics |
 | 10 | Not shuffling with a seed | `random_state=` everywhere |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+import pandas as pd
+train = pd.DataFrame({"x": [1.0, 2.0, 3.0]})
+test = pd.DataFrame({"x": [10.0]})
+mu, sd = train["x"].mean(), train["x"].std()
+print(((test["x"] - mu) / sd).round(2).tolist())
+```
+What prints?
+- [x] `[8.0]`
+- [ ] `[0.0]`
+- [ ] `[nan]`
+The test set must be scaled with the **training** statistics (μ = 2, sd = 1), so 10 becomes (10 − 2)/1 = 8.0. Re-fitting the scaler on one test row would give `nan` (std of 1 value), and fitting on train+test leaks.
+:::
+
+:::quiz
+```python
+import pandas as pd
+train = pd.get_dummies(pd.Series(["a", "b", "c"]), dtype=int)
+test = pd.get_dummies(pd.Series(["b", "d"]), dtype=int)
+print(test.reindex(columns=train.columns, fill_value=0).values.tolist())
+```
+What prints?
+- [ ] `[[1, 0], [0, 1]]`
+- [x] `[[0, 1, 0], [0, 0, 0]]`
+- [ ] `KeyError: 'd'`
+`reindex` forces the test frame onto the **training columns**: the unseen category `d` is dropped (all zeros), and the missing `a`/`c` columns are filled with 0. Without this, the model would receive a different number of features.
+:::
+
+:::quiz
+A model predicts the positive class for 90 of 100 samples. 10 samples are truly positive and the model catches all of them. What are precision and recall?
+- [ ] precision 1.0, recall 0.11
+- [x] precision 0.11, recall 1.0
+- [ ] precision 0.9, recall 1.0
+Recall = TP / (actual positives) = 10/10 = 1.0. Precision = TP / (predicted positives) = 10/90 ≈ 0.11. Predicting "positive" for almost everything maximises recall and wrecks precision, which is why you report both (or F1).
+:::
+
 ## Practice problems
 
 :::problem basic | Stratified split by hand | groupby.sample
@@ -535,4 +576,184 @@ print(leakage_scan(df, "churned"))
 ```
 :::explain
 Leaky features are usually **consequences** of the target (a closure date, a refund), so on their own they separate the classes almost perfectly. The rank-based AUC measures each feature's standalone power without training a model, and `max(a, 1 − a)` catches negative relationships too. Legitimate features (`visits` here) score well but not perfectly. A scan like this belongs in every pipeline's validation step.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Consistent one-hot encoding | ML task
+Write `fit_one_hot(train, cols)`, which returns an encoder function. The encoder must produce **the same columns in the same order** for any frame: unseen categories become all zeros, and missing categories become 0 columns.
+:::starter
+```python norun
+import pandas as pd
+
+def fit_one_hot(train, cols):
+    pass
+```
+:::tests
+```python norun
+import pandas as pd
+train = pd.DataFrame({"color": ["red", "blue", "red"], "size": ["S", "M", "L"], "price": [1.0, 2.0, 3.0]})
+enc = fit_one_hot(train, ["color", "size"])
+a = enc(train)
+b = enc(pd.DataFrame({"color": ["green"], "size": ["M"], "price": [9.0]}))
+assert list(a.columns) == list(b.columns)
+assert "price" in a.columns and "color" not in a.columns
+assert b.filter(like="color_").sum(axis=1).tolist() == [0]
+assert b["size_M"].tolist() == [1] and a.shape[0] == 3
+```
+:::hint
+At fit time, record the column list from `pd.get_dummies(train, columns=cols, dtype=int)`. At transform time, call `get_dummies` again and then `reindex(columns=saved, fill_value=0)`.
+:::solution
+```python
+import pandas as pd
+
+def fit_one_hot(train, cols):
+    columns = pd.get_dummies(train, columns=cols, dtype=int).columns   # learned from train only
+    def encode(df):
+        return pd.get_dummies(df, columns=cols, dtype=int).reindex(columns=columns, fill_value=0)
+    return encode
+
+enc = fit_one_hot(pd.DataFrame({"c": ["x", "y"]}), ["c"])
+print(enc(pd.DataFrame({"c": ["y", "z"]})))
+```
+:::explain
+`get_dummies` on its own creates columns from whatever values happen to appear, so train and test can end up with different shapes and the model breaks (or worse, silently misaligns features). The fix is the **fit/transform** pattern: learn the vocabulary once, then **reindex** every later frame to it. A closure returning `encode` keeps the learned state, a tiny version of scikit-learn's `OneHotEncoder(handle_unknown="ignore")`.
+:::complexity
+O(n · categories).
+:::end
+
+:::program medium | K-fold indices by hand | ML task
+Write `kfold(n, k, seed)`, which yields `(train_idx, val_idx)` NumPy arrays. Every index must appear in exactly one validation fold, the fold sizes may differ by at most 1, and the result must be shuffled but reproducible with `seed`.
+:::starter
+```python norun
+import numpy as np
+
+def kfold(n, k, seed=0):
+    pass
+```
+:::tests
+```python norun
+import numpy as np
+folds = list(kfold(10, 3, seed=42))
+assert len(folds) == 3
+vals = np.concatenate([v for _, v in folds])
+assert sorted(vals.tolist()) == list(range(10))
+assert sorted(len(v) for _, v in folds) == [3, 3, 4]
+assert all(set(t).isdisjoint(v) and len(t) + len(v) == 10 for t, v in folds)
+assert [v.tolist() for _, v in kfold(10, 3, seed=42)] == [v.tolist() for _, v in folds]
+assert [v.tolist() for _, v in kfold(10, 3, seed=1)] != [v.tolist() for _, v in folds]
+```
+:::solution
+```python
+import numpy as np
+
+def kfold(n, k, seed=0):
+    idx = np.random.default_rng(seed).permutation(n)     # shuffle once, reproducibly
+    for val in np.array_split(idx, k):                  # sizes differ by at most 1
+        yield np.setdiff1d(idx, val), val
+
+for tr, va in kfold(7, 3, seed=0):
+    print(va, len(tr))
+```
+:::explain
+`np.array_split` (unlike `np.split`) allows uneven parts: 10 into 3 gives sizes 4, 3, 3. The training set is "everything else", computed with `setdiff1d`. A local `default_rng(seed)` gives reproducible shuffles without touching global random state. Being a **generator**, it yields one fold at a time, like scikit-learn's `KFold.split`.
+:::complexity
+O(k · n log n) because of `setdiff1d`'s sort (a boolean mask would give O(k · n)).
+:::end
+
+:::program medium | Classification report from scratch | ML task
+Given `y_true` and `y_pred` (lists of labels), return a DataFrame indexed by class with columns `precision, recall, f1, support`, plus the overall accuracy. Treat 0/0 as 0.
+:::starter
+```python norun
+import pandas as pd
+
+def report(y_true, y_pred):
+    pass        # return (df, accuracy)
+```
+:::tests
+```python norun
+import pandas as pd
+yt = ["cat", "cat", "dog", "dog", "dog", "bird"]
+yp = ["cat", "dog", "dog", "dog", "cat", "cat"]
+df, acc = report(yt, yp)
+assert list(df.columns) == ["precision", "recall", "f1", "support"]
+assert abs(acc - 3 / 6) < 1e-12
+assert abs(df.loc["cat", "precision"] - 1 / 3) < 1e-12 and abs(df.loc["cat", "recall"] - 1 / 2) < 1e-12
+assert abs(df.loc["dog", "f1"] - 2 / 3) < 1e-12 and df.loc["dog", "support"] == 3
+assert df.loc["bird", "precision"] == 0 and df.loc["bird", "f1"] == 0
+```
+:::hint
+`pd.crosstab(true, pred)` gives the confusion matrix. Reindex it so that rows and columns share the same label set. TP is the diagonal, the column sums are the predicted counts, and the row sums are the actual counts (the support).
+:::solution
+```python
+import numpy as np
+import pandas as pd
+
+def report(y_true, y_pred):
+    labels = sorted(set(y_true) | set(y_pred))
+    cm = pd.crosstab(pd.Series(y_true, name="true"), pd.Series(y_pred, name="pred"))
+    cm = cm.reindex(index=labels, columns=labels, fill_value=0)
+    tp = pd.Series(np.diag(cm), index=labels)
+    predicted, actual = cm.sum(axis=0), cm.sum(axis=1)
+    precision = (tp / predicted).fillna(0)                 # 0/0 -> NaN -> 0
+    recall = (tp / actual).fillna(0)
+    f1 = (2 * precision * recall / (precision + recall)).fillna(0)
+    df = pd.DataFrame({"precision": precision, "recall": recall, "f1": f1, "support": actual})
+    return df, tp.sum() / len(y_true)
+
+df, acc = report(["a", "a", "b"], ["a", "b", "b"])
+print(df.round(2), acc)
+```
+:::explain
+Everything comes from the **confusion matrix**: rows are the truth, columns are the predictions. For class c, TP is `cm[c, c]`, precision divides by the column total (everything predicted as c), and recall divides by the row total (everything that really is c). `reindex` matters when a class is never predicted (`bird`), since its column would otherwise be missing. Pandas turns 0/0 into NaN, which `fillna(0)` cleans up, matching scikit-learn's `zero_division=0`.
+:::complexity
+O(n + C²).
+:::end
+
+:::program hard | ROC AUC from ranks | ML task
+Compute ROC AUC for binary labels and scores **without** looping over pairs, using the rank-sum (Mann–Whitney U) formula with ties counted as ½. Check it against an O(P·N) brute force.
+:::starter
+```python norun
+import numpy as np
+import pandas as pd
+
+def roc_auc(y, scores):
+    pass
+```
+:::tests
+```python norun
+import numpy as np
+def brute(y, s):
+    pos = [b for a, b in zip(y, s) if a == 1]; neg = [b for a, b in zip(y, s) if a == 0]
+    return sum((p > q) + 0.5 * (p == q) for p in pos for q in neg) / (len(pos) * len(neg))
+assert roc_auc([0, 0, 1, 1], [0.1, 0.4, 0.35, 0.8]) == 0.75
+assert roc_auc([0, 1], [0.5, 0.5]) == 0.5
+assert roc_auc([1, 1, 0], [3, 2, 1]) == 1.0
+rng = np.random.default_rng(3)
+y = rng.integers(0, 2, 400); s = rng.integers(0, 20, 400) + y * 3    # many ties
+assert abs(roc_auc(y, s) - brute(y, s)) < 1e-12
+```
+:::hint
+AUC = P(random positive scores higher than random negative). Rank all the scores with `pd.Series(scores).rank()` (average ranks for ties). Then AUC = (sum of positive ranks − P(P+1)/2) / (P · N).
+:::solution
+```python
+import numpy as np
+import pandas as pd
+
+def roc_auc(y, scores):
+    y = np.asarray(y)
+    ranks = pd.Series(scores).rank(method="average").to_numpy()   # ties share the average rank
+    n_pos = int(y.sum())
+    n_neg = len(y) - n_pos
+    u = ranks[y == 1].sum() - n_pos * (n_pos + 1) / 2              # Mann–Whitney U
+    return u / (n_pos * n_neg)
+
+print(roc_auc([0, 0, 1, 1], [0.1, 0.4, 0.35, 0.8]))
+```
+:::explain
+AUC is the fraction of (positive, negative) pairs ranked correctly. Summing the positives' ranks counts, for each positive, how many items sit below it, including the other positives. Subtracting `P(P+1)/2` removes those positive-positive "wins", which leaves exactly the positive-over-negative pairs. **Average ranks** give tied pairs half credit automatically. That replaces the O(P·N) pair loop with one O(n log n) sort, which is how libraries compute it.
+:::complexity
+O(n log n).
 :::end
