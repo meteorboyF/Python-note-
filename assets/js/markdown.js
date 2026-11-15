@@ -34,6 +34,14 @@
   window.PROGRAM_REGISTRY = [];
   window.CODE_REGISTRY = [];
 
+  // FNV-1a 32-bit over UTF-16 code units; tools/build-traces.py computes the same key
+  window.codeHash = function (str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, "0");
+  };
+  let inQuiz = false;   // quiz code must not reveal its output
+
   const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const renderer = new marked.Renderer();
@@ -50,10 +58,11 @@
     const idx = CODE_REGISTRY.push({ code: text, flags }) - 1;
     const isPy = lang === "python" || lang === "py";
     const runnable = isPy && !flags.includes("norun") && !flags.includes("local");
+    const traced = runnable && !inQuiz;
     const label = flags.includes("error") ? "python · raises an error (on purpose)"
       : flags.includes("plot") ? "python · plot"
       : flags.includes("local") ? "python · run on your machine (threads/processes don't run in the browser)" : lang;
-    return `<div class="code${flags.includes("error") ? " error" : ""}" data-idx="${idx}">
+    return `<div class="code${flags.includes("error") ? " error" : ""}${traced ? " traced" : ""}" data-idx="${idx}"${traced ? ` data-h="${codeHash(text)}"` : ""}>
       <div class="bar"><span>${label}</span><span class="sp"></span>
         <button class="copy-btn" data-act="copy">Copy</button>
         ${runnable ? `<button data-act="run" title="Run and show output here">▶ Run</button>` : ""}
@@ -132,7 +141,8 @@
       else (opts.length ? why : q).push(l);
     }
     const id = "q" + (++quizN);
-    return `<div class="quiz" id="${id}"><div class="qh">🍪 Predict / Quick check</div>${md(q.join("\n"))}
+    inQuiz = true; const qHtml = md(q.join("\n")); inQuiz = false;
+    return `<div class="quiz" id="${id}"><div class="qh">🍪 Predict / Quick check</div>${qHtml}
       <div class="opts">${opts.map(o => `<button class="opt" data-right="${o.right}">${marked.parseInline(o.text)}</button>`).join("")}</div>
       <div class="why">${md(why.join("\n"))}</div></div>`;
   }

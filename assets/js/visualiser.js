@@ -11,7 +11,7 @@
   function emitStatus(msg) { statusListeners.forEach(fn => fn(msg)); }
   function getWorker() {
     if (worker) return worker;
-    worker = new Worker("assets/js/tracer-worker.js?v=4", { type: "module" });
+    worker = new Worker("assets/js/tracer-worker.js?v=5", { type: "module" });
     ready = false;
     worker.onmessage = (e) => {
       const m = e.data;
@@ -66,38 +66,254 @@
   }
   const clip = (s, n = 60) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-  function narrate(steps, i, lines) {
-    const s = steps[i], p = steps[i - 1];
-    const top = s.f[s.f.length - 1];
-    const code = (lines[s.l - 1] || "").trim();
-    const parts = [];
-    if (s.e === "call") {
-      const args = top ? top.v.map(([k, v]) => `<code>${esc(k)} = ${esc(clip(short(v, s.h), 40))}</code>`).join(", ") : "";
-      parts.push(`📞 <b>Calling ${esc(top ? top.n : "?")}</b>${args ? " with " + args : ""}. A new <i>frame</i> (its own box of local variables) is created.`);
-    } else if (s.e === "return") {
-      parts.push(`↩️ <b>${esc(top ? top.n : "?")}</b> finishes and returns <code>${esc(clip(short(s.r, s.h), 60))}</code>. Its frame is about to be destroyed.`);
-    } else if (s.e === "exception") {
-      parts.push(`💥 <b>Exception:</b> <code>${esc(s.x)}</code> on line ${s.l}. Python looks for a matching <code>except</code>…`);
-    } else {
-      parts.push(`➡️ About to run <b>line ${s.l}</b>: <code>${esc(clip(code, 70))}</code>`);
-    }
-    // what changed since the previous step (in the frame still on top)
-    if (p) {
-      const pf = p.f.find(f => top && f.id === top.id);
-      if (pf && s.e !== "call") {
-        const before = new Map(pf.v.map(([k, v]) => [k, short(v, p.h)]));
-        const changes = [];
-        for (const [k, v] of top.v) {
-          const now = short(v, s.h);
-          if (!before.has(k)) changes.push(`new name <code>${esc(k)}</code> → <code>${esc(clip(now, 40))}</code>`);
-          else if (before.get(k) !== now) changes.push(`<code>${esc(k)}</code>: <code>${esc(clip(before.get(k), 30))}</code> → <code>${esc(clip(now, 30))}</code>`);
+  // ---------------- precomputed traces (tools/build-traces.py) ----------------
+  // Heaps and frames are stored as changes vs the previous step; rebuild full ones.
+  function undelta(r) {
+    if (!r || r._full) return r;
+    let heap = {}, frames = new Map();
+    for (const st of r.steps) {
+      heap = Object.assign({}, heap, st.h);
+      (st.g || []).forEach(k => delete heap[k]);
+      st.h = heap; delete st.g;
+      const cur = new Map();
+      st.f = st.f.map(fr => {
+        let full = fr;
+        if (fr.n === undefined) {
+          const old = frames.get(fr.id) || { n: "?", v: [] };
+          const gone = new Set(fr.x || []);
+          const v = old.v.filter(([k]) => !gone.has(k)).map(x => x.slice());
+          (fr.d || []).forEach(([k, val]) => { const j = v.findIndex(x => x[0] === k); if (j >= 0) v[j] = [k, val]; else v.push([k, val]); });
+          full = { n: old.n, id: fr.id, v };
+          if (old.k) full.k = old.k;
         }
-        for (const k of before.keys()) if (!top.v.some(([kk]) => kk === k)) changes.push(`<code>${esc(k)}</code> deleted`);
-        if (changes.length) parts.push(`<br>✏️ Changed: ${changes.slice(0, 5).join(" · ")}${changes.length > 5 ? " …" : ""}`);
-      }
-      if (s.o > p.o) parts.push(`<br>🖨️ Printed output.`);
+        cur.set(full.id, full);
+        return full;
+      });
+      frames = cur;
     }
-    return parts.join(" ");
+    r._full = true;
+    return r;
+  }
+
+  // ---------------- reading the source ----------------
+  const indentOf = l => (l.match(/^\s*/) || [""])[0].replace(/\t/g, "    ").length;
+  const stripComment = l => l.replace(/\s+#.*$/, "");
+  function blockEnd(lines, n) {             // last line of the indented block under header line n
+    const ind = indentOf(lines[n - 1] || ""); let last = n;
+    for (let j = n + 1; j <= lines.length; j++) {
+      const l = lines[j - 1];
+      if (!l.trim() || /^\s*#/.test(l)) continue;
+      if (indentOf(l) > ind) last = j; else break;
+    }
+    return last;
+  }
+  function kindOf(code) {
+    const c = stripComment(code).trim();
+    const header = c.endsWith(":");
+    let m;
+    if ((m = c.match(/^(async\s+)?for\s+(.+?)\s+in\s+(.+):$/))) return { k: "for", target: m[2], iter: m[3] };
+    if ((m = c.match(/^while\s+(.+):$/))) return { k: "while", cond: m[1] };
+    if ((m = c.match(/^(if|elif)\s+(.+):$/))) return { k: m[1], cond: m[2] };
+    if ((m = c.match(/^(async\s+)?def\s+(\w+)/))) return { k: "def", name: m[2] };
+    if ((m = c.match(/^class\s+(\w+)/))) return { k: "class", name: m[1] };
+    if (/^(import|from)\s/.test(c)) return { k: "import" };
+    if (/^return\b/.test(c)) return { k: "return" };
+    if (/^(yield)\b/.test(c)) return { k: "yield" };
+    if (/^with\s/.test(c) && header) return { k: "with" };
+    if (/^try\s*:$/.test(c)) return { k: "try" };
+    if (/^except\b/.test(c)) return { k: "except" };
+    if (/^raise\b/.test(c)) return { k: "raise" };
+    if (/^assert\b/.test(c)) return { k: "assert" };
+    if (/^(break|continue|pass)\b/.test(c)) return { k: c.split(/\W/)[0] };
+    if (/^print\(/.test(c)) return { k: "print" };
+    if (/^@/.test(c)) return { k: "decorator" };
+    return { k: header ? "block" : "stmt" };
+  }
+  const topOf = st => st.f[st.f.length - 1];
+
+  // variables of frame `id` that differ between two steps
+  function frameDiff(p, s, id) {
+    const pf = p.f.find(f => f.id === id), sf = s.f.find(f => f.id === id);
+    if (!pf || !sf) return [];
+    const before = new Map(pf.v.map(([k, v]) => [k, v]));
+    const out = [];
+    for (const [k, v] of sf.v) {
+      const was = before.get(k);
+      const now = short(v, s.h);
+      if (was === undefined) { out.push({ k, now, kind: "new", ref: v[0] === "R" ? v[1] : null }); continue; }
+      const old = short(was, p.h);
+      if (was[0] === "R" && v[0] === "R" && was[1] === v[1]) {
+        if (old !== now) out.push({ k, old, now, kind: "mutated", ref: v[1] });
+      } else if (old !== now || was[0] !== v[0] || was[1] !== v[1]) {
+        out.push({ k, old, now, kind: was[0] === "R" && v[0] === "R" ? "rebound" : "changed" });
+      }
+    }
+    for (const k of before.keys()) if (!sf.v.some(([kk]) => kk === k)) out.push({ k, kind: "deleted" });
+    return out;
+  }
+  const isCallableTxt = t => /^(function|class) /.test(t);
+
+  // What did executing steps[i-1] do? Returns {head, fx[], kind, outcome}
+  function effectOf(steps, i, lines, stdout) {
+    const p = steps[i - 1], s = steps[i];
+    const code = (lines[p.l - 1] || "").trim();
+    const top = topOf(p);
+    const fx = []; let head = "", outcome = null;
+    const K = kindOf(code);
+    const diffs = top ? frameDiff(p, s, top.id) : [];
+    const printed = s.o > p.o ? stdout.slice(p.o, s.o) : "";
+    const callsInto = s.e === "call" && s.f.length > p.f.length;
+    if (top && top.k === "class" && (p.e === "call" || p.e === "return")) {
+      head = p.e === "call"
+        ? `🏗️ Running the body of <b>class ${esc(top.n)}</b>: each name it defines (attributes, methods) is collected into the class's namespace.`
+        : `🏗️ The class body finished. Python now builds the <b>class object ${esc(top.n)}</b> from the collected names and binds it to that name.`;
+      return { head, fx, kind: "classbody" };
+    }
+    if (p.e === "call") {
+      const args = top ? top.v.filter(([, v]) => !isCallableTxt(short(v, p.h))).map(([k, v]) => `<code>${esc(k)} = ${esc(clip(short(v, p.h), 40))}</code>`) : [];
+      head = `📞 Entered <b>${esc(top ? top.n : "?")}()</b>${args.length ? " with " + args.join(", ") : ""}. A new <i>frame</i> (its own box of local variables) was created${p.f.length > 2 ? `: <b>${p.f.length - 1} calls deep</b> on the call stack` : ""}.`;
+      return { head, fx, kind: "call" };
+    }
+    if (p.e === "return") {
+      const isInit = top && /(^|\.)__init__$/.test(top.n);
+      head = `↩️ <b>${esc(top ? top.n : "?")}()</b> returned <code>${esc(clip(short(p.r, p.h), 60))}</code>. Its frame is thrown away and the caller continues.`
+        + (isInit ? ` (<code>__init__</code> always returns None; the <i>call</i> <code>${esc(top.n.split(".")[0])}(...)</code> hands back the new object.)` : "");
+      const caller = topOf(s);
+      if (caller && p.f.some(f => f.id === caller.id)) {
+        frameDiff(p, s, caller.id).forEach(d => {
+          if (d.kind === "new") fx.push(`🆕 back in <b>${esc(caller.n === "Global frame" ? "the main program" : caller.n)}</b>: <code>${esc(d.k)}</code> → <code>${esc(clip(d.now, 50))}</code>`);
+          else if (d.kind === "changed" || d.kind === "rebound") fx.push(`✏️ back in the caller: <code>${esc(d.k)}</code> → <code>${esc(clip(d.now, 50))}</code>`);
+        });
+      }
+      if (printed) fx.push(`🖨️ printed <code>${esc(clip(printed.replace(/\n$/, "").replace(/\n/g, "⏎"), 70))}</code>`);
+      return { head, fx, kind: "return" };
+    }
+    if (p.e === "exception") {
+      head = `💥 Raised <code>${esc(p.x)}</code>. Python unwinds until an <code>except</code> catches it.`;
+      return { head, fx, kind: "exception" };
+    }
+    const sameFrame = s.f.some(f => top && f.id === top.id) && !callsInto && topOf(s) && topOf(s).id === (top && top.id);
+    const inside = sameFrame && s.l > p.l && s.l <= blockEnd(lines, p.l);
+    if (callsInto && topOf(s).k === "class") {
+      head = `🏗️ A <code>class</code> statement: Python is about to run the class body to collect its attributes and methods.`;
+    } else if (callsInto) {
+      head = `📞 This line calls <b>${esc(topOf(s).n)}()</b>, so Python pauses here and jumps into it.`;
+    } else if (K.k === "for") {
+      const loopVars = diffs.filter(d => d.kind !== "mutated");
+      if (inside) { outcome = "item"; head = `🔁 <b>Loop:</b> took the next item from <code>${esc(clip(K.iter, 40))}</code>${loopVars.length ? ` → ${loopVars.map(d => `<code>${esc(d.k)} = ${esc(clip(d.now, 30))}</code>`).join(", ")}` : ""}, and enters the loop body.`; }
+      else { outcome = "done"; head = `🏁 <b>Loop finished:</b> <code>${esc(clip(K.iter, 40))}</code> has no more items, so Python continues after the loop.`; }
+    } else if (K.k === "while" || K.k === "if" || K.k === "elif") {
+      outcome = inside ? "T" : "F";
+      head = inside
+        ? `✅ Condition <code>${esc(clip(K.cond, 50))}</code> is <b>True</b> → ${K.k === "while" ? "run the loop body (again)" : "run the indented block"}.`
+        : `❌ Condition <code>${esc(clip(K.cond, 50))}</code> is <b>False</b> → ${K.k === "while" ? "the loop ends" : "skip the indented block"}.`;
+    } else if (K.k === "def") {
+      head = `🧩 Defined function <code>${esc(K.name)}</code>. The function object is stored under that name; its body runs only when it's <i>called</i>.`;
+    } else if (K.k === "class" && top && top.k === "class" && top.n.split(".").pop() === K.name) {
+      head = `🏗️ The class body starts. Python notes the class's name and module, then runs the indented lines one by one.`;
+    } else if (/^[rbfu]?["'].*["']$/i.test(stripComment(code)) && !diffs.length) {
+      head = `📝 A <b>docstring</b>: a string literal as the first statement becomes the <code>__doc__</code> (help text). It changes nothing else.`;
+    } else if (K.k === "class") {
+      head = `🏗️ Built class <code>${esc(K.name)}</code>: its body ran once and the methods/attributes were collected into a class object.`;
+    } else if (K.k === "import") {
+      head = `📦 Imported a module, so its names are now available.`;
+    } else if (K.k === "decorator") {
+      head = `🎀 A decorator line: the function defined below will be passed through it.`;
+    } else if (K.k === "assert") {
+      head = `✔️ The assertion held (it was True), so execution simply continues.`;
+    } else if (K.k === "break") head = `⛔ <code>break</code>: jump out of the innermost loop right now.`;
+    else if (K.k === "continue") head = `⏭️ <code>continue</code>: skip the rest of this iteration and go back to the loop header.`;
+    else if (K.k === "pass") head = `🫥 <code>pass</code> does nothing. It's a placeholder.`;
+    else if (K.k === "try") head = `🛡️ Entering a <code>try</code> block: errors raised inside can be caught below.`;
+    else if (K.k === "except") head = `🧯 The exception matched this <code>except</code>, so the handler runs.`;
+    else if (K.k === "with") head = `🚪 <code>with</code> called <code>__enter__</code> on the context manager. <code>__exit__</code> is guaranteed to run when the block ends.`;
+    // effects
+    for (const d of diffs) {
+      if (K.k === "for" && outcome === "item" && d.kind !== "mutated") continue;
+      if (isCallableTxt(d.now || "") && (K.k === "def" || K.k === "class" || K.k === "decorator")) continue;
+      if (d.kind === "new") fx.push(`🆕 new name <code>${esc(d.k)}</code> → <code>${esc(clip(d.now, 50))}</code>`);
+      else if (d.kind === "changed") fx.push(`✏️ <code>${esc(d.k)}</code>: <code>${esc(clip(d.old, 30))}</code> → <code>${esc(clip(d.now, 30))}</code>`);
+      else if (d.kind === "rebound") fx.push(`🔀 <code>${esc(d.k)}</code> now refers to a <b>different object</b>: <code>${esc(clip(d.now, 40))}</code>`);
+      else if (d.kind === "mutated") {
+        const also = top.v.filter(([k, v]) => k !== d.k && v[0] === "R" && v[1] === d.ref).map(([k]) => `<code>${esc(k)}</code>`);
+        fx.push(`🛠️ <code>${esc(d.k)}</code> was changed <b>in place</b> (same object): <code>${esc(clip(d.old, 34))}</code> → <code>${esc(clip(d.now, 34))}</code>${also.length ? `. ${also.join(", ")} see${also.length === 1 ? "s" : ""} it too (same object!)` : ""}`);
+      }
+      else if (d.kind === "deleted") fx.push(`🗑️ <code>${esc(d.k)}</code> was deleted`);
+    }
+    if (printed) fx.push(`🖨️ printed <code>${esc(clip(printed.replace(/\n$/, "").replace(/\n/g, "⏎"), 70))}</code>`);
+    if (!head) head = fx.length ? "" : `Ran it. Nothing visible changed (no variable or output changed).`;
+    return { head, fx, kind: K.k, outcome, diffs, printed };
+  }
+
+  function narrate(steps, i, lines, result) {
+    const s = steps[i];
+    const lineHTML = n => `<code>${esc(clip((lines[n - 1] || "").trim(), 70))}</code>`;
+    let html = "";
+    if (i === 0) {
+      html += `<div class="nr-now"><span class="tag start">▶ start</span>The program is ready and nothing has run yet. Press <b>Next ▶</b> (or <kbd>→</kbd>) to run the highlighted line.</div>`;
+    } else {
+      const p = steps[i - 1];
+      const ef = effectOf(steps, i, lines, result.stdout);
+      const label = p.e === "call" ? "entered" : p.e === "return" ? "returned" : p.e === "exception" ? "error" : "just ran";
+      html += `<div class="nr-now"><span class="tag done">✔ ${label} · line ${p.l}</span>${p.e === "line" ? lineHTML(p.l) : ""}
+        ${ef.head ? `<div class="nr-head">${ef.head}</div>` : ""}${ef.fx.length ? `<ul class="nr-fx">${ef.fx.slice(0, 6).map(x => `<li>${x}</li>`).join("")}${ef.fx.length > 6 ? `<li>…and ${ef.fx.length - 6} more</li>` : ""}</ul>` : ""}</div>`;
+    }
+    const last = i === steps.length - 1;
+    if (last) {
+      html += result.error
+        ? `<div class="nr-next end err"><span class="tag stop">🛑 stopped</span>The program crashed with <b>${esc(result.error)}</b>${result.errLine ? ` on line ${result.errLine}` : ""}.</div>`
+        : result.truncated ? `<div class="nr-next end"><span class="tag stop">⏸ trace limit</span>Stopped after ${steps.length} steps to keep things readable. The <b>Output</b> tab has the complete result.</div>`
+        : `<div class="nr-next end"><span class="tag fin">🏁 finished</span>The program ran to the end.</div>`;
+    } else {
+      const ev = topOf(s) && topOf(s).k === "class" && s.e !== "line" ? (s.e === "call" ? `about to run the body of class <b>${esc(topOf(s).n)}</b>` : `class body of <b>${esc(topOf(s).n)}</b> is about to finish`) : s.e === "call" ? `about to enter <b>${esc(topOf(s).n)}()</b>` : s.e === "return" ? `<b>${esc(topOf(s) ? topOf(s).n : "")}()</b> is about to return` : s.e === "exception" ? "an exception is propagating" : "runs next";
+      html += `<div class="nr-next"><span class="tag next">➜ line ${s.l}</span>${s.e === "line" ? lineHTML(s.l) + " " : ""}<span class="muted">${ev}</span></div>`;
+    }
+    return html;
+  }
+
+  // ---------------- the line-by-line breakdown ----------------
+  function breakdown(code, result) {
+    const r = undelta(result), steps = r.steps;
+    const lines = code.replace(/\s+$/, "").split("\n");
+    const info = lines.map(() => ({ runs: 0, vars: new Map(), T: 0, F: 0, items: 0, done: 0, printed: [], calls: new Map(), rets: [], mut: new Map() }));
+    for (let i = 1; i < steps.length; i++) {
+      const p = steps[i - 1]; const L = info[p.l - 1]; if (!L) continue;
+      if (p.e === "line") L.runs++;
+      if (p.e === "return") { if (!(topOf(p) && topOf(p).k === "class")) L.rets.push(clip(short(p.r, p.h), 24)); continue; }
+      if (p.e !== "line") continue;
+      const ef = effectOf(steps, i, lines, r.stdout);
+      if (ef.outcome === "T") L.T++; else if (ef.outcome === "F") L.F++; else if (ef.outcome === "item") L.items++; else if (ef.outcome === "done") L.done++;
+      const s = steps[i];
+      if (s.e === "call" && s.f.length > p.f.length && topOf(s).k !== "class") { const n = topOf(s).n; L.calls.set(n, (L.calls.get(n) || 0) + 1); }
+      (ef.diffs || []).forEach(d => {
+        if (d.kind === "deleted" || isCallableTxt(d.now || "")) return;
+        const map = d.kind === "mutated" ? L.mut : L.vars;
+        const seq = map.get(d.k) || []; const v = clip(d.now, 22);
+        if (seq.at(-1) !== v) seq.push(v); map.set(d.k, seq);
+      });
+      if (ef.printed) L.printed.push(clip(ef.printed.replace(/\n$/, "").replace(/\n/g, "⏎"), 30));
+    }
+    const fmtSeq = seq => (seq.length > 7 ? [...seq.slice(0, 3), "…", ...seq.slice(-3)] : seq).map(v => v === "…" ? "…" : `<code>${esc(v)}</code>`).join(" → ");
+    const rows = lines.map((src, j) => {
+      const L = info[j]; const n = j + 1; const t = src.trim();
+      if (!t || t.startsWith("#")) return "";
+      const K = kindOf(t); const bits = [];
+      if (K.k === "for") { if (L.items) bits.push(`🔁 looped <b>${L.items}×</b>`); if (L.done) bits.push(`then finished`); }
+      if (K.k === "while" || K.k === "if" || K.k === "elif") { if (L.T) bits.push(`✅ True ×${L.T}`); if (L.F) bits.push(`❌ False ×${L.F}`); }
+      if (K.k === "def" && L.runs) bits.push(`🧩 defines <code>${esc(K.name)}</code>`);
+      if (K.k === "class" && L.runs) bits.push(`🏗️ builds class <code>${esc(K.name)}</code>`);
+      L.calls.forEach((c, name) => bits.push(`📞 calls <b>${esc(name)}()</b>${c > 1 ? ` ×${c}` : ""}`));
+      L.vars.forEach((seq, k) => bits.push(`<code>${esc(k)}</code>: ${fmtSeq(seq)}`));
+      L.mut.forEach((seq, k) => bits.push(`🛠️ <code>${esc(k)}</code> changed in place: ${fmtSeq(seq)}`));
+      if (L.printed.length) bits.push(`🖨️ printed ${L.printed.slice(0, 4).map(x => `<code>${esc(x)}</code>`).join(", ")}${L.printed.length > 4 ? ` +${L.printed.length - 4} more` : ""}`);
+      if (L.rets.length) bits.push(`↩️ returned ${[...new Set(L.rets)].slice(0, 4).map(x => `<code>${esc(x)}</code>`).join(", ")}`);
+      if (r.errLine === n && r.error) bits.push(`<span class="bd-err">💥 ${esc(r.error)}</span>`);
+      const never = !L.runs && !L.rets.length && !(r.errLine === n);
+      const runs = L.runs > 1 ? `<span class="runs hot">${L.runs}×</span>` : L.runs ? `<span class="runs">1×</span>` : `<span class="runs zero">0×</span>`;
+      return `<tr class="${never ? "never" : ""}"><td class="ln">${n}</td><td class="src"><code>${esc(src)}</code></td><td>${runs}</td><td class="what">${never ? `<span class="muted">${/^(else|finally)\b/.test(t) ? "branch marker (no step of its own)" : "never ran"}</span>` : bits.join("<br>") || `<span class="muted">ran</span>`}</td></tr>`;
+    }).join("");
+    return `<p class="bd-help">Every line, how many times it ran, and what it did: values each name took (in order), branch decisions and printed text.${r.truncated ? ` <b>Only the first ${steps.length} steps are counted.</b>` : ""}</p>
+      <div class="bd-wrap"><table class="bd"><thead><tr><th>#</th><th>Code</th><th>Ran</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   // ---------------- rendering ----------------
@@ -198,8 +414,8 @@
 
   // ---------------- the component ----------------
   class Visualiser {
-    constructor(host, { onStatus, inline } = {}) {
-      this.host = host; this.onStatus = onStatus || (() => {}); this.inline = inline;
+    constructor(host, { onStatus, inline, stack, onResult } = {}) {
+      this.host = host; this.onStatus = onStatus || (() => {}); this.inline = inline; this.stack = stack; this.onResult = onResult || (() => {});
       this.steps = []; this.i = 0; this.code = ""; this.result = null; this.playing = null; this.editing = false; this.stdin = "";
       this.view = "mem"; this.predict = false; this.score = { right: 0, total: 0 }; this.answered = new Set();
       this._onResize = () => this.canvas && drawArrows(this.canvas);
@@ -217,6 +433,7 @@
       try {
         this.result = await execute(this.code, "trace", this.stdin);
         this.steps = this.result.steps;
+        this.onResult(this.result, this.code);
         if (!this.steps.length) this.steps = [{ l: this.result.errLine || 1, e: "line", f: [], h: {}, o: this.result.stdout.length }];
         this.i = 0; this.render();
         this.onStatus(`${this.steps.length} steps${this.result.truncated ? " (stopped early: step limit reached)" : ""}${this.result.error ? " · ends with an error" : ""}`);
@@ -226,10 +443,19 @@
       } finally { statusListeners.delete(listener); }
     }
 
+    // show a trace that was computed ahead of time (no Python download needed)
+    loadResult(code, result) {
+      this.code = code.replace(/\s+$/, "") + "\n"; this.pause();
+      this._traceHTML = null; this.answered = new Set(); this.score = { right: 0, total: 0 };
+      this.result = undelta(result);
+      this.steps = this.result.steps.length ? this.result.steps : [{ l: this.result.errLine || 1, e: "line", f: [], h: {}, o: this.result.stdout.length }];
+      this.i = 0; this.render();
+    }
+
     render() {
       const lines = this.code.split("\n"); if (lines.at(-1) === "") lines.pop();
       this.lines = lines;
-      this.host.innerHTML = `<div class="vz">
+      this.host.innerHTML = `<div class="vz${this.stack ? " stack" : ""}">
         <div class="vz-left">
           ${this.editing
             ? `<textarea class="vz-edit" spellcheck="false">${esc(this.code)}</textarea>
@@ -430,8 +656,7 @@
       // narration
       const narr = H.querySelector(".vz-narr");
       if (narr && this.lines) {
-        let t = narrate(this.steps, this.i, this.lines);
-        if (last) t += this.result.error ? `<br>🛑 Program stopped with <b>${esc(this.result.error)}</b>${this.result.errLine ? ` (line ${this.result.errLine})` : ""}.` : this.result.truncated ? `<br>⏸️ Stopped after ${this.steps.length} steps (limit). Probably a long or infinite loop.` : `<br>🏁 This is the last step. The program finished.`;
+        let t = narrate(this.steps, this.i, this.lines, this.result);
         if (this.predict && !last) t += `<br><span class="muted">🎯 Predict mode is on: press <b>Next</b> and you'll be asked for the new values first.</span>`;
         narr.innerHTML = t;
       }
@@ -474,12 +699,15 @@
   window.Viz = {
     execute,
     Visualiser,
-    open(code) {
+    undelta,
+    breakdown,
+    open(code, result) {
       const ov = overlay(); ov.hidden = false; document.body.style.overflow = "hidden";
       const status = document.getElementById("vizStatus");
       if (overlayViz) overlayViz.destroy();
       overlayViz = new Visualiser(document.getElementById("vizBody"), { onStatus: m => (status.textContent = m) });
-      overlayViz.load(code);
+      if (result) { overlayViz.loadResult(code, result); status.textContent = `${result.steps.length} steps${result.truncated ? " (trace limit reached)" : ""}`; }
+      else overlayViz.load(code);
       document.getElementById("vizEdit").textContent = "✎ Edit code";
     },
     close() {

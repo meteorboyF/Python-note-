@@ -176,7 +176,10 @@ class Tracer:
         for fr in chain:
             is_mod = fr.f_code.co_name == "<module>"
             name = "Global frame" if is_mod else fr.f_code.co_qualname if hasattr(fr.f_code, "co_qualname") else fr.f_code.co_name
-            frames.append({"n": name, "v": self.frame_vars(fr, heap, is_mod), "id": self.hid(fr)})
+            fd = {"n": name, "v": self.frame_vars(fr, heap, is_mod), "id": self.hid(fr)}
+            if not is_mod and not (fr.f_code.co_flags & inspect.CO_NEWLOCALS):
+                fd["k"] = "class"   # a class body, not a function call
+            frames.append(fd)
         step = {"l": frame.f_lineno, "e": event, "f": frames, "h": heap, "o": self.out.size}
         if event == "return" and frame.f_code.co_name != "<module>":
             step["r"] = self.enc(arg, heap)

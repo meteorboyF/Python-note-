@@ -68,7 +68,7 @@
       <h2 style="border:0;margin-top:0">How to use these notes</h2>
       <div class="howto">
         <div><b>1 · Read the concept</b><p>Every chapter starts in plain English, then adds the precise technical words. <span class="gl" data-term="Mutable">Dotted words</span> show a definition when you hover or tap.</p></div>
-        <div><b>2 · Step through code</b><p>Press <b>👣 Visualise</b> on any example to watch variables, frames and objects change line by line. Press <b>▶ Run</b> to see the output.</p></div>
+        <div><b>2 · Step through code</b><p>Every example has a card under it: <b>▸ Output</b> (what it prints), <b>🔍 Breakdown</b> (each line, how often it ran, what it did) and <b>👣 Visualise</b>, which runs right there in the page with frames, objects and a plain-English note for every step. Use <kbd>←</kbd> <kbd>→</kbd> to step. <b>✎ Edit &amp; run</b> lets you change the code.</p></div>
         <div><b>3 · Predict, then check</b><p>The 🍪 quick checks ask "what does this print?". Guess first. That's where real learning happens.</p></div>
         <div><b>4 · Solve problems</b><p>Basic → Medium → Hard. Try before opening the hint. Tick <b>Solved</b> to track progress (saved in this browser).</p></div>
         <div><b>5 · Trace by hand</b><p>In the visualiser, open <b>📋 Trace table</b> for the step-by-step table you'd write on paper, or switch on <b>🎯 Predict mode</b> to guess every variable before it changes.</p></div>
@@ -126,12 +126,103 @@
     });
     updateSolvedCount(slug);
     wireGlossary(body);
+    mountCards(slug, body);
     visited.add(slug); store.set("pn-visited", [...visited]);
     renderSidebar(slug);
     if (anchor) { const el = document.getElementById(anchor); if (el) { el.scrollIntoView(); if (el.tagName === "DETAILS") el.open = true; el.closest("details") && (el.closest("details").open = true); return; } }
     window.scrollTo(0, 0);
     tocSpy();
   }
+  // ---------- code cards: Output · Breakdown · Visualise (precomputed traces) ----------
+  const TRACE_V = "5";
+  const traceCache = new Map();
+  const loadTraces = slug => {
+    if (!traceCache.has(slug)) traceCache.set(slug, fetch(`traces/${slug}.json?v=${TRACE_V}`).then(r => (r.ok ? r.json() : {})).catch(() => ({})));
+    return traceCache.get(slug);
+  };
+  const cardViz = new WeakMap();
+  let cardObserver = null;
+  function outputHTML(r) {
+    const full = r.full || r;
+    let html = esc(full.stdout || "");
+    if (full.error) html += `<span class="err">${html && !html.endsWith("\n") ? "\n" : ""}Traceback (most recent call last) … ${esc(full.error)}${full.errLine ? `  ← line ${full.errLine}` : ""}</span>`;
+    html += (r.figs || []).map(f => `<img alt="figure produced by this code" loading="lazy" src="traces/fig/${esc(f)}?v=${TRACE_V}">`).join("");
+    return html || `<span class="muted">(This code prints nothing. Open 👣 Visualise to watch the variables change.)</span>`;
+  }
+  function showTab(card, tab, remember) {
+    const cx = card.querySelector(".cx"); if (!cx) return;
+    cx.querySelectorAll("[data-cx]").forEach(b => b.classList.toggle("on", b.dataset.cx === tab));
+    cx.querySelectorAll(".cx-pane").forEach(p => (p.hidden = p.dataset.pane !== tab));
+    card.classList.toggle("viz-open", tab === "viz");
+    if (tab === "bd") {
+      const pane = cx.querySelector('[data-pane="bd"]');
+      if (!pane.dataset.done) { pane.innerHTML = Viz.breakdown(card._code, card._result); pane.dataset.done = "1"; }
+    }
+    if (tab === "viz") {
+      let viz = cardViz.get(card);
+      const pane = cx.querySelector('[data-pane="viz"]');
+      if (!viz) {
+        viz = new Viz.Visualiser(pane, { inline: true, stack: true, onResult: (r, code) => refreshCard(card, r, code) });
+        cardViz.set(card, viz);
+        viz.loadResult(card._code, card._result);
+      } else viz.go(viz.i);
+    }
+    if (remember && tab !== "bd") store.set("pn-cx-tab", tab);
+  }
+  function refreshCard(card, r, code) {      // after "Edit & run": show the new run's output/breakdown
+    card._result = r; card._code = code;
+    const eb = card.querySelector('[data-act="edit"]'); if (eb) eb.textContent = "✎ Edit & run";
+    const cx = card.querySelector(".cx");
+    cx.querySelector('[data-pane="out"]').innerHTML = `<pre class="cx-out">${outputHTML({ ...r, figs: [] })}${(r.figures || []).map(b => `<img alt="figure" src="data:image/png;base64,${b}">`).join("")}</pre>`;
+    const bd = cx.querySelector('[data-pane="bd"]'); bd.dataset.done = ""; if (!bd.hidden) showTab(card, "bd");
+    cx.querySelector("[data-cx=viz] small").textContent = `${r.steps.length} steps`;
+  }
+  async function mountCards(slug, body) {
+    const cards = $$(".code.traced", body); if (!cards.length) return;
+    const data = await loadTraces(slug);
+    if (!document.body.contains(cards[0])) return;          // navigated away meanwhile
+    if (cardObserver) cardObserver.disconnect();
+    cardObserver = new IntersectionObserver(entries => entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      cardObserver.unobserve(en.target);
+      const card = en.target;
+      showTab(card, card._want, false);
+    }), { rootMargin: "300px 0px" });
+    const pref = store.get("pn-cx-tab", null);
+    cards.forEach(card => {
+      const r = data[card.dataset.h];
+      if (!r) { card.classList.remove("traced"); return; }   // keep live ▶ Run / 👣 Visualise
+      card._result = r; card._code = CODE_REGISTRY[+card.dataset.idx].code;
+      const n = r.steps.length;
+      card.querySelector('[data-act="run"]')?.remove();
+      const vb = card.querySelector('[data-act="viz"]');
+      if (vb) { vb.outerHTML = `<button data-act="edit" title="Change the code and run it in your browser">✎ Edit &amp; run</button><button data-act="full" title="Open the visualiser full screen">⤢ Full screen</button>`; }
+      card.insertAdjacentHTML("beforeend", `<div class="cx">
+        <div class="cx-tabs" role="tablist">
+          <button data-cx="out" role="tab">▸ Output</button>
+          <button data-cx="bd" role="tab">🔍 Breakdown</button>
+          <button data-cx="viz" role="tab">👣 Visualise <small>${n} steps</small></button>
+          <span class="sp"></span><span class="cx-hint">your choice of Output / Visualise is remembered</span>
+        </div>
+        <div class="cx-pane" data-pane="out"><pre class="cx-out">${outputHTML(r)}</pre></div>
+        <div class="cx-pane" data-pane="bd" hidden></div>
+        <div class="cx-pane" data-pane="viz" hidden tabindex="0"></div></div>`);
+      card._want = pref === "out" || pref === "bd" ? pref : (n >= 4 ? "viz" : "out");
+      if (card._want === "out") showTab(card, "out", false);
+      else cardObserver.observe(card);
+    });
+  }
+  app.addEventListener("click", e => {
+    const tb = e.target.closest(".cx [data-cx]");
+    if (tb) showTab(tb.closest(".code"), tb.dataset.cx, true);
+  });
+  app.addEventListener("keydown", e => {
+    const pane = e.target.closest && e.target.closest('.cx-pane[data-pane="viz"]');
+    if (!pane || /TEXTAREA|INPUT|SELECT/.test(e.target.tagName)) return;
+    const viz = cardViz.get(pane.closest(".code"));
+    if (viz && viz.key(e)) e.preventDefault();
+  });
+
   function updateSolvedCount(slug) {
     const el = $("#solvedCount"); if (!el) return;
     const total = $$(".problem, .program").length; const done = $$(".problem.solved, .program.solved").length;
@@ -254,6 +345,13 @@
         navigator.clipboard?.writeText(entry.code).then(() => { btn.textContent = "Copied ✓"; setTimeout(() => (btn.textContent = "Copy"), 1200); });
       } else if (btn.dataset.act === "viz") {
         Viz.open(entry.code);
+      } else if (btn.dataset.act === "full") {
+        Viz.open(box._code, box._result);
+      } else if (btn.dataset.act === "edit") {
+        showTab(box, "viz", false);
+        const viz = cardViz.get(box);
+        if (viz && !viz.editing) { viz.toggleEdit(); btn.textContent = "👣 Back to steps"; }
+        else if (viz) { viz.toggleEdit(); btn.textContent = "✎ Edit & run"; }
       } else if (btn.dataset.act === "run") {
         let out = box.querySelector(".run-out");
         if (!out) { out = document.createElement("div"); out.className = "run-out"; box.append(out); }
