@@ -12,7 +12,7 @@ for (const t of topics) {
   const f = `content/${t.slug}.md`;
   if (!fs.existsSync(f)) continue;
   const src = fs.readFileSync(f, "utf8");
-  let fence = false, pn = 0, quizzes = 0; const used = new Set();
+  let fence = false, pn = 0, wn = 0, quizzes = 0; const used = new Set();
   for (const line of src.split("\n")) {
     if (/^\s*(```|~~~)/.test(line)) { fence = !fence; continue; }
     if (fence) continue;
@@ -23,10 +23,15 @@ for (const t of topics) {
     } else if ((m = line.match(/^:::problem\s+(\w+)\s*\|\s*([^|]+)(?:\|\s*(.*))?$/))) {
       pn++;
       out.entries.push({ k: "Problem", t: clean(m[2]), x: `${m[1]} ${m[3] || ""}`, s: t.slug, a: `${t.slug}-p${pn}`, topic: `${t.title} · ${m[1]}` });
+    } else if ((m = line.match(/^:::program\s+(\w+)\s*\|\s*([^|]+)(?:\|\s*([^|]*))?/))) {
+      wn++;
+      out.entries.push({ k: "Program", t: clean(m[2]), x: `${m[1]} ${m[3] || ""} write a program`, s: t.slug, a: `${t.slug}-w${wn}`, topic: `${t.title} · write a program` });
     } else if (/^:::quiz/.test(line)) quizzes++;
   }
-  out.topics[t.slug] = { problems: pn, quizzes };
+  out.topics[t.slug] = { problems: pn, programs: wn, quizzes };
 }
 fs.writeFileSync("assets/search-index.json", JSON.stringify(out));
 const tot = Object.values(out.topics).reduce((a, x) => a + x.problems, 0);
-console.log(`indexed ${Object.keys(out.topics).length} topics, ${tot} problems, ${out.entries.length} entries`);
+const progs = Object.values(out.topics).reduce((a, x) => a + x.programs, 0);
+const qz = Object.values(out.topics).reduce((a, x) => a + x.quizzes, 0);
+console.log(`indexed ${Object.keys(out.topics).length} topics, ${tot} problems, ${progs} programs, ${qz} quizzes, ${out.entries.length} entries`);

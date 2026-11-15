@@ -46,8 +46,9 @@
 
   // ---------- pages ----------
   function topicProgress(slug) {
-    const total = INDEX && INDEX.topics[slug] ? INDEX.topics[slug].problems : 0;
-    const done = [...solved].filter(p => p.startsWith(slug + "-p")).length;
+    const t = INDEX && INDEX.topics[slug];
+    const total = t ? t.problems + (t.programs || 0) : 0;
+    const done = [...solved].filter(p => p.startsWith(slug + "-p") || p.startsWith(slug + "-w")).length;
     return { total, done };
   }
 
@@ -56,12 +57,13 @@
     await indexP;
     const totalProblems = Object.values(INDEX.topics).reduce((a, t) => a + t.problems, 0);
     const totalQuizzes = Object.values(INDEX.topics).reduce((a, t) => a + (t.quizzes || 0), 0);
+    const totalPrograms = Object.values(INDEX.topics).reduce((a, t) => a + (t.programs || 0), 0);
     app.innerHTML = `<div class="page wide"><div class="content" style="max-width:none">
       <section class="hero">
         <h1>Python, baked fresh. <em>From zero to boss.</em></h1>
         <p>Plain-English concepts, the tricks and traps interviewers test, ${totalProblems || "hundreds of"} practice problems from Basic to Hard, and a visualiser that steps through code one line at a time.</p>
         <div class="actions"><a class="btn" href="#/t/variables">Start at Chapter 1 →</a><a class="btn ghost" href="#/playground">Open the visualiser</a><a class="btn ghost" href="#/glossary">Learn the terms</a></div>
-        <div class="stats"><div><b>${ALL_TOPICS.length}</b>topics</div><div><b>${totalProblems}</b>problems</div><div><b>${totalQuizzes}</b>quick checks</div><div><b>${GLOSSARY.length}</b>terms explained</div><div><b>${solved.size}</b>solved by you</div></div>
+        <div class="stats"><div><b>${ALL_TOPICS.length}</b>topics</div><div><b>${totalProblems}</b>problems</div><div><b>${totalPrograms}</b>write-a-program tasks</div><div><b>${totalQuizzes}</b>quick checks</div><div><b>${GLOSSARY.length}</b>terms explained</div><div><b>${solved.size}</b>solved by you</div></div>
       </section>
       <h2 style="border:0;margin-top:0">How to use these notes</h2>
       <div class="howto">
@@ -69,6 +71,8 @@
         <div><b>2 · Step through code</b><p>Press <b>👣 Visualise</b> on any example to watch variables, frames and objects change line by line. Press <b>▶ Run</b> to see the output.</p></div>
         <div><b>3 · Predict, then check</b><p>The 🍪 quick checks ask "what does this print?". Guess first. That's where real learning happens.</p></div>
         <div><b>4 · Solve problems</b><p>Basic → Medium → Hard. Try before opening the hint. Tick <b>Solved</b> to track progress (saved in this browser).</p></div>
+        <div><b>5 · Trace by hand</b><p>In the visualiser, open <b>📋 Trace table</b> for the step-by-step table you'd write on paper, or switch on <b>🎯 Predict mode</b> to guess every variable before it changes.</p></div>
+        <div><b>6 · Write programs</b><p>Each chapter ends with <b>✍️ Write a program</b>: an editor plus <b>▶ Run tests</b>, a mini LeetCode judge in your browser. Pass every test and it's marked solved.</p></div>
       </div>
       ${PARTS.map(p => `<section class="part-block"><h2>${esc(p.title)}</h2><p>${esc(p.blurb)}</p><div class="cards">${p.topics.map(t => {
         const at = ALL_TOPICS.find(x => x.slug === t.slug); const pr = topicProgress(t.slug);
@@ -114,7 +118,12 @@
     if (firstProb) {
       firstProb.insertAdjacentHTML("beforebegin", `<div class="problems-head"><b>Show:</b>${["all", "basic", "medium", "hard", "unsolved"].map(f => `<button class="filter-btn${f === "all" ? " on" : ""}" data-filter="${f}">${f[0].toUpperCase() + f.slice(1)}</button>`).join("")}<span class="muted" id="solvedCount"></span></div>`);
     }
-    $$(".problem input[type=checkbox]", body).forEach(cb => { cb.checked = solved.has(cb.dataset.pid); cb.closest(".problem").classList.toggle("solved", cb.checked); });
+    $$(".problem input[type=checkbox], .program input[type=checkbox]", body).forEach(cb => { cb.checked = solved.has(cb.dataset.pid); cb.closest(".problem, .program").classList.toggle("solved", cb.checked); });
+    $$(".program textarea", body).forEach(ta => {
+      const entry = PROGRAM_REGISTRY[+ta.closest(".program").dataset.prog];
+      const saved = store.get("pn-code-" + entry.pid, null);
+      if (saved) ta.value = saved;
+    });
     updateSolvedCount(slug);
     wireGlossary(body);
     visited.add(slug); store.set("pn-visited", [...visited]);
@@ -125,7 +134,7 @@
   }
   function updateSolvedCount(slug) {
     const el = $("#solvedCount"); if (!el) return;
-    const total = $$(".problem").length; const done = $$(".problem.solved").length;
+    const total = $$(".problem, .program").length; const done = $$(".problem.solved, .program.solved").length;
     el.textContent = `${done}/${total} solved`;
   }
   function tocSpy() {
@@ -268,9 +277,74 @@
     }
   });
   app.addEventListener("change", e => {
-    const cb = e.target.closest(".problem input[type=checkbox]"); if (!cb) return;
+    const cb = e.target.closest(".problem input[type=checkbox], .program input[type=checkbox]"); if (!cb) return;
     cb.checked ? solved.add(cb.dataset.pid) : solved.delete(cb.dataset.pid); saveSolved();
-    cb.closest(".problem").classList.toggle("solved", cb.checked); updateSolvedCount();
+    cb.closest(".problem, .program").classList.toggle("solved", cb.checked); updateSolvedCount();
+  });
+
+  // ---------- write-a-program cards: editor, tests, visualise ----------
+  const pyStr = s => JSON.stringify(s);                 // JSON string literals are valid Python strings
+  function testHarness(tests) {
+    return `
+_pn_tests = [${tests.map(pyStr).join(", ")}]
+_pn_pass = _pn_total = 0
+for _pn_t in _pn_tests:
+    if not _pn_t.lstrip().startswith("assert"):
+        exec(_pn_t, globals()); continue
+    _pn_total += 1
+    try:
+        exec(_pn_t, globals())
+        print("PASS  " + _pn_t); _pn_pass += 1
+    except AssertionError:
+        _pn_got = ""
+        if " == " in _pn_t:
+            try:
+                _pn_got = "\\n      got: " + repr(eval(_pn_t.strip()[7:].split(" == ", 1)[0], globals()))
+            except Exception:
+                pass
+        print("FAIL  " + _pn_t + _pn_got)
+    except Exception as _pn_e:
+        print("ERROR " + _pn_t + "\\n      " + type(_pn_e).__name__ + ": " + str(_pn_e))
+print(f"SUMMARY {_pn_pass}/{_pn_total}")
+`;
+  }
+  app.addEventListener("click", async e => {
+    const b = e.target.closest(".program [data-pa]"); if (!b) return;
+    const card = b.closest(".program"); const entry = PROGRAM_REGISTRY[+card.dataset.prog];
+    const ta = card.querySelector("textarea"); const out = card.querySelector(".test-out");
+    if (b.dataset.pa === "reset") { ta.value = entry.starter; store.set("pn-code-" + entry.pid, null); out.hidden = true; return; }
+    if (b.dataset.pa === "viz") {
+      const calls = entry.tests.filter(t => t.startsWith("assert ") && t.includes(" == ")).slice(0, 2)
+        .map(t => `print(${t.slice(7).split(" == ")[0]})`);
+      const setup = entry.tests.filter(t => !t.startsWith("assert"));
+      Viz.open(ta.value.replace(/\s+$/, "") + "\n\n# --- sample calls from the tests ---\n" + [...setup, ...calls].join("\n") + "\n");
+      return;
+    }
+    out.hidden = false;
+    out.innerHTML = `<span class="muted">Running tests…</span>`;
+    store.set("pn-code-" + entry.pid, ta.value);
+    try {
+      const r = await Viz.execute(ta.value + "\n" + testHarness(entry.tests), "run");
+      const lines = r.stdout.split("\n");
+      const sum = lines.find(l => l.startsWith("SUMMARY ")) || "";
+      let html = lines.filter(l => !l.startsWith("SUMMARY ")).map(l =>
+        l.startsWith("PASS") ? `<span class="pass">✔ ${esc(l.slice(6))}</span>` :
+        l.startsWith("FAIL") || l.startsWith("ERROR") ? `<span class="fail">✘ ${esc(l.slice(6))}</span>` : esc(l)).join("\n");
+      if (r.error) html += `\n<span class="fail">${esc(r.error)}${r.errLine ? ` (line ${r.errLine})` : ""}</span>`;
+      const [pass, total] = (sum.match(/(\d+)\/(\d+)/) || [0, 0, 0]).slice(1).map(Number);
+      const all = total > 0 && pass === total && !r.error;
+      html += `<span class="sum">${all ? "🎉 All tests passed! Marked as solved." : total ? `${pass}/${total} tests passed. Keep going!` : "Your code didn't finish running. Check the error above."}</span>`;
+      out.innerHTML = html;
+      if (all) {
+        const cb = card.querySelector("input[type=checkbox]");
+        cb.checked = true; solved.add(entry.pid); saveSolved(); card.classList.add("solved"); updateSolvedCount();
+      }
+    } catch (err) { out.innerHTML = `<span class="fail">${esc(err.message)}</span>`; }
+  });
+  app.addEventListener("keydown", e => {
+    const ta = e.target.closest(".program textarea"); if (!ta) return;
+    if (e.key === "Tab") { e.preventDefault(); ta.setRangeText("    ", ta.selectionStart, ta.selectionEnd, "end"); }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ta.closest(".program").querySelector("[data-pa=test]").click(); }
   });
 
   // ---------- search ----------

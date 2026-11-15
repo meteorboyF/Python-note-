@@ -11,7 +11,7 @@
   function emitStatus(msg) { statusListeners.forEach(fn => fn(msg)); }
   function getWorker() {
     if (worker) return worker;
-    worker = new Worker("assets/js/tracer-worker.js", { type: "module" });
+    worker = new Worker("assets/js/tracer-worker.js?v=3", { type: "module" });
     ready = false;
     worker.onmessage = (e) => {
       const m = e.data;
@@ -110,10 +110,23 @@
   function renderObj(h, o, fresh) {
     const head = `<div class="oh">${esc(o.c)} <span class="muted">#${h}</span></div>`;
     const cls = `vz-obj ${o.t}${o.cls ? "" : o.t === "obj" ? " instance" : ""}${fresh ? " fresh" : ""}`;
+    if (o.t === "grid") {
+      const rows = o.v.map((r, i) => `<tr>${o.d === 2 ? `<th>${i}</th>` : ""}${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("");
+      const hdr = `<tr>${o.d === 2 ? "<th></th>" : ""}${(o.v[0] || []).map((_, j) => `<th>${j}</th>`).join("")}</tr>`;
+      return `<div class="${cls}" id="o-${h}">${head}<div class="box gridbox"><table>${hdr}${rows}</table></div></div>`;
+    }
+    if (o.t === "table") {
+      const hdr = `<tr><th></th>${o.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>`;
+      const rows = o.rows.map((r, i) => `<tr><th>${esc(o.idx[i])}</th>${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("");
+      return `<div class="${cls}" id="o-${h}">${head}<div class="box gridbox df"><table>${hdr}${rows}</table></div></div>`;
+    }
     if (o.t === "list" || o.t === "tuple" || o.t === "set") {
       const items = o.v || [];
       if (!items.length) return `<div class="${cls}" id="o-${h}">${head}<div class="cells empty">empty</div></div>`;
-      const cells = items.map((x, i) => `<div class="cell">${o.t === "set" ? "" : `<div class="i">${i}</div>`}<div class="val">${valCell(x)}</div></div>`).join("");
+      const nums = o.t !== "set" && items.length >= 2 && items.every(x => x[0] === "P" && /^-?\d+(\.\d+)?$/.test(x[1])) ? items.map(x => +x[1]) : null;
+      const maxAbs = nums ? Math.max(...nums.map(Math.abs), 1e-9) : 1;
+      const bar = (i) => nums ? `<div class="barwrap"><div class="vbar${nums[i] < 0 ? " neg" : ""}" style="height:${Math.max(2, Math.round(34 * Math.abs(nums[i]) / maxAbs))}px"></div></div>` : "";
+      const cells = items.map((x, i) => `<div class="cell">${bar(i)}${o.t === "set" ? "" : `<div class="i">${i}</div>`}<div class="val">${valCell(x)}</div></div>`).join("");
       return `<div class="${cls}" id="o-${h}">${head}<div class="cells">${cells}${o.more ? `<div class="cell"><div class="val">+${o.more}</div></div>` : ""}</div></div>`;
     }
     if (o.t === "dict" || o.t === "obj") {
@@ -123,11 +136,33 @@
     return `<div class="${cls}" id="o-${h}">${head}<div class="box">${esc(o.s)}</div></div>`;
   }
 
+  const childRef = (o, name) => {
+    const a = (o.v || []).find(x => x[0] === name);
+    return a && a[1][0] === "R" ? a[1][1] : null;
+  };
+  const isTree = (o) => o && o.t === "obj" && !o.cls && (o.v || []).some(x => x[0] === "left") && (o.v || []).some(x => x[0] === "right");
+
+  // a binary tree is drawn as nested boxes: node on top, children side by side below
+  function renderTree(h, step, prevHeap, placed) {
+    placed.add(h);
+    const o = step.h[h];
+    const kids = ["left", "right"].map(k => {
+      const r = childRef(o, k);
+      if (r == null || placed.has(r) || !isTree(step.h[r])) return `<div class="vt-kid vt-empty"></div>`;
+      return `<div class="vt-kid">${renderTree(r, step, prevHeap, placed)}</div>`;
+    }).join("");
+    const node = renderObj(h, o, !prevHeap[h] || JSON.stringify(prevHeap[h]) !== JSON.stringify(o));
+    return `<div class="vt"><div class="vt-node">${node}</div>${/vt-kid">/.test(kids) ? `<div class="vt-kids">${kids}</div>` : ""}</div>`;
+  }
+
   function layoutHeap(step) {
     const placed = new Set(); const rows = [];
     const visit = (h, row) => {
-      if (placed.has(h) || !step.h[h]) return; placed.add(h); row.push(h);
-      const o = step.h[h]; const refs = [];
+      if (placed.has(h) || !step.h[h]) return;
+      const o = step.h[h];
+      if (isTree(o)) { row.push({ tree: h }); return; }   // trees are rendered (and marked placed) later
+      placed.add(h); row.push(h);
+      const refs = [];
       (o.v || []).forEach(x => {
         if (Array.isArray(x[0])) { x.forEach(y => y[0] === "R" && refs.push(y[1])); }
         else if (x[0] === "R") refs.push(x[1]);
@@ -166,6 +201,7 @@
     constructor(host, { onStatus, inline } = {}) {
       this.host = host; this.onStatus = onStatus || (() => {}); this.inline = inline;
       this.steps = []; this.i = 0; this.code = ""; this.result = null; this.playing = null; this.editing = false; this.stdin = "";
+      this.view = "mem"; this.predict = false; this.score = { right: 0, total: 0 }; this.answered = new Set();
       this._onResize = () => this.canvas && drawArrows(this.canvas);
       window.addEventListener("resize", this._onResize);
     }
@@ -173,6 +209,7 @@
 
     async load(code) {
       this.code = code.replace(/\s+$/, "") + "\n"; this.pause();
+      this._traceHTML = null; this.answered = new Set(); this.score = { right: 0, total: 0 };
       this.host.innerHTML = `<div class="vz-loading"><div><div class="spinner"></div><b>Warming up the oven…</b><p class="muted" id="vzLoadMsg">${ready ? "Tracing your code" : "Loading Python in your browser (about 10 MB, first time only; cached afterwards)"}</p></div></div>`;
       const msgEl = this.host.querySelector("#vzLoadMsg");
       const listener = m => { if (msgEl) msgEl.textContent = m; this.onStatus(m); };
@@ -213,7 +250,14 @@
                </div>`}
         </div>
         <div class="vz-right">
-          <div class="vz-canvas"><svg class="arrows"></svg>
+          ${this.editing ? "" : `<div class="vz-tabs">
+            <button data-view="mem" class="${this.view === "trace" ? "" : "on"}">🧠 Memory</button>
+            <button data-view="trace" class="${this.view === "trace" ? "on" : ""}">📋 Trace table</button>
+            <span class="sp"></span>
+            <button data-a="predict" class="${this.predict ? "on" : ""}" title="Guess each variable's next value before it is revealed">🎯 Predict mode${this.predict ? ` · ${this.score.right}/${this.score.total}` : ""}</button>
+          </div>
+          <div class="vz-trace" ${this.view === "trace" ? "" : "hidden"}></div>`}
+          <div class="vz-canvas" ${this.view === "trace" ? "hidden" : ""}><svg class="arrows"></svg>
             <div class="vz-col"><h4>Frames (names)</h4><div class="vz-frames"></div></div>
             <div class="vz-col"><h4>Objects (values in memory)</h4><div class="vz-heap"></div></div>
           </div>
@@ -224,6 +268,13 @@
         const a = b.dataset.a;
         if (a === "speed") b.onchange = () => { if (this.playing) { this.pause(); this.play(); } };
         else b.onclick = () => this.act(a);
+      });
+      this.host.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
+        this.view = b.dataset.view;
+        this.host.querySelectorAll("[data-view]").forEach(x => x.classList.toggle("on", x === b));
+        this.host.querySelector(".vz-trace").hidden = this.view !== "trace";
+        this.canvas.hidden = this.view === "trace";
+        this.go(this.i);
       });
       const range = this.host.querySelector("input[type=range]");
       if (range) range.oninput = () => this.go(+range.value);
@@ -236,7 +287,100 @@
       this.go(this.i);
     }
 
+    // ---- manual-trace assist: predict mode ----
+    questionFor(i) {
+      const s = this.steps[i], n = this.steps[i + 1];
+      if (!s || !n || !n.f.length) return [];
+      const top = n.f[n.f.length - 1];
+      const before = s.f.find(f => f.id === top.id);
+      if (!before) return [];                                    // a brand-new call: nothing to predict yet
+      const old = new Map(before.v.map(([k, v]) => [k, short(v, s.h)]));
+      return top.v.map(([k, v]) => ({ k, now: short(v, n.h), was: old.get(k) }))
+        .filter(q => q.now !== q.was && !/^(function|class) /.test(q.now)).slice(0, 3);
+    }
+    showPredict(qs) {
+      const narr = this.host.querySelector(".vz-narr"); if (!narr) return;
+      const s = this.steps[this.i];
+      narr.innerHTML = `<div class="predict"><b>🎯 Your turn.</b> Line ${s.l} <code>${esc(clip((this.lines[s.l - 1] || "").trim(), 60))}</code> runs next. Predict:
+        ${qs.map((q, j) => `<label><code>${esc(q.k)}</code>${q.was === undefined ? " (new)" : ` (now <code>${esc(clip(q.was, 24))}</code>)`} → <input data-q="${j}" spellcheck="false" autocomplete="off" placeholder="value"></label>`).join("")}
+        <div class="row"><button class="primary" data-p="check">Check</button><button data-p="skip">Skip</button></div></div>`;
+      const inputs = narr.querySelectorAll("input");
+      inputs[0]?.focus();
+      const norm = x => String(x).trim().replace(/\s+/g, "").replace(/^['"](.*)['"]$/, "$1").toLowerCase();
+      const same = (a, b) => norm(a) === norm(b) || (!isNaN(parseFloat(a)) && !isNaN(parseFloat(b)) && Math.abs(parseFloat(a) - parseFloat(b)) < 1e-9 && /^[-\d.e+]+$/i.test(norm(a)));
+      const finish = (checked) => {
+        this.answered.add(this.i);
+        let html = "";
+        if (checked) {
+          qs.forEach((q, j) => {
+            const ok = same(inputs[j].value, q.now);
+            this.score.total++; if (ok) this.score.right++;
+            html += `<div>${ok ? "✅" : "❌"} <code>${esc(q.k)}</code> = <code>${esc(clip(q.now, 50))}</code>${ok ? "" : ` (you said <code>${esc(inputs[j].value || "nothing")}</code>)`}</div>`;
+          });
+        }
+        narr.innerHTML = `<div class="predict">${html}<div class="row"><button class="primary" data-p="go">Continue ▶</button><span class="muted">Score ${this.score.right}/${this.score.total}</span></div></div>`;
+        const pb = this.host.querySelector("[data-a=predict]"); if (pb) pb.textContent = `🎯 Predict mode · ${this.score.right}/${this.score.total}`;
+        narr.querySelector("[data-p=go]").onclick = () => this.go(this.i + 1);
+        narr.querySelector("[data-p=go]").focus();
+      };
+      narr.querySelector("[data-p=check]").onclick = () => finish(true);
+      narr.querySelector("[data-p=skip]").onclick = () => finish(false);
+      inputs.forEach(inp => inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); finish(true); } e.stopPropagation(); }));
+      this.awaiting = true;
+    }
+
+    // ---- manual-trace assist: the classic hand-trace table ----
+    renderTrace() {
+      const box = this.host.querySelector(".vz-trace"); if (!box) return;
+      if (!this._traceHTML) {
+        const cols = [];
+        const isCallable = v => /^(function|class) /.test(v);
+        const rows = this.steps.slice(0, 600).map((s, i) => {
+          const top = s.f[s.f.length - 1];
+          const vals = {};
+          if (top) top.v.forEach(([k, v]) => { const t = short(v, s.h); if (!isCallable(t)) { vals[k] = t; if (!cols.includes(k)) cols.push(k); } });
+          return { i, s, frame: top ? top.n : "", id: top ? top.id : null, vals };
+        });
+        const shown = cols.slice(0, 12);
+        let prev = null;
+        const body = rows.map(r => {
+          const tds = shown.map(k => {
+            const v = r.vals[k];
+            const changed = v !== undefined && (!prev || prev.id !== r.id || prev.vals[k] !== v);
+            return `<td class="${changed ? "chg" : ""}">${v === undefined ? "" : esc(clip(v, 22))}</td>`;
+          }).join("");
+          const out = r.i > 0 && r.s.o > this.steps[r.i - 1].o ? esc(clip(this.result.stdout.slice(this.steps[r.i - 1].o, r.s.o).trim(), 24)) : "";
+          prev = r;
+          const ev = r.s.e === "call" ? "📞" : r.s.e === "return" ? "↩️" : r.s.e === "exception" ? "💥" : "";
+          return `<tr data-step="${r.i}"><td>${r.i + 1}</td><td>${r.s.l}</td><td class="code">${ev} ${esc(clip((this.lines[r.s.l - 1] || "").trim(), 34))}</td><td>${esc(r.frame)}</td>${tds}<td class="out">${out}</td></tr>`;
+        }).join("");
+        this._traceHTML = `<p class="muted tt-help">The hand-trace table you'd write on paper: one row per step, one column per variable. Highlighted cells changed on that step. Click a row to jump there.${this.steps.length > 600 ? " (First 600 steps shown.)" : ""}${cols.length > 12 ? " (First 12 variables shown.)" : ""}</p>
+          <div class="tt-wrap"><table class="tt"><thead><tr><th>Step</th><th>Line</th><th>Code</th><th>Frame</th>${shown.map(k => `<th>${esc(k)}</th>`).join("")}<th>Printed</th></tr></thead><tbody>${body}</tbody></table></div>`;
+        box.innerHTML = this._traceHTML;
+        box.querySelectorAll("tr[data-step]").forEach(tr => tr.onclick = () => this.go(+tr.dataset.step));
+      }
+      box.querySelectorAll("tr.cur").forEach(tr => tr.classList.remove("cur"));
+      const cur = box.querySelector(`tr[data-step="${this.i}"]`);
+      if (cur) {
+        cur.classList.add("cur");
+        const wrap = box.querySelector(".tt-wrap");
+        if (cur.offsetTop < wrap.scrollTop + 30 || cur.offsetTop > wrap.scrollTop + wrap.clientHeight - 30) wrap.scrollTop = cur.offsetTop - wrap.clientHeight / 2;
+      }
+    }
+
     act(a) {
+      if (a === "predict") {
+        this.predict = !this.predict;
+        const pb = this.host.querySelector("[data-a=predict]");
+        if (pb) { pb.classList.toggle("on", this.predict); pb.textContent = this.predict ? `🎯 Predict mode · ${this.score.right}/${this.score.total}` : "🎯 Predict mode"; }
+        if (this.predict) this.pause();
+        this.go(this.i);
+        return;
+      }
+      if (a === "next" && this.predict && !this.answered.has(this.i)) {
+        const qs = this.questionFor(this.i);
+        if (qs.length) { this.showPredict(qs); return; }
+      }
       if (a === "first") this.go(0);
       if (a === "prev") this.go(this.i - 1);
       if (a === "next") this.go(this.i + 1);
@@ -288,6 +432,7 @@
       if (narr && this.lines) {
         let t = narrate(this.steps, this.i, this.lines);
         if (last) t += this.result.error ? `<br>🛑 Program stopped with <b>${esc(this.result.error)}</b>${this.result.errLine ? ` (line ${this.result.errLine})` : ""}.` : this.result.truncated ? `<br>⏸️ Stopped after ${this.steps.length} steps (limit). Probably a long or infinite loop.` : `<br>🏁 This is the last step. The program finished.`;
+        if (this.predict && !last) t += `<br><span class="muted">🎯 Predict mode is on: press <b>Next</b> and you'll be asked for the new values first.</span>`;
         narr.innerHTML = t;
       }
       // frames
@@ -303,7 +448,15 @@
       }).join("") || `<div class="muted" style="font-size:.85rem">(nothing yet)</div>`;
       // heap
       const prevHeap = p ? p.h : {};
-      H.querySelector(".vz-heap").innerHTML = layoutHeap(s).map(row => `<div class="vz-row">${row.map(h => renderObj(h, s.h[h], !prevHeap[h] || JSON.stringify(prevHeap[h]) !== JSON.stringify(s.h[h]))).join("")}</div>`).join("") || `<div class="muted" style="font-size:.85rem">No objects yet. Plain numbers, strings, booleans and None are shown right inside the frame.</div>`;
+      const treePlaced = new Set();
+      H.querySelector(".vz-heap").innerHTML = layoutHeap(s).map(row => {
+        const html = row.map(item => {
+          if (typeof item === "object") return treePlaced.has(item.tree) ? "" : renderTree(item.tree, s, prevHeap, treePlaced);
+          return renderObj(item, s.h[item], !prevHeap[item] || JSON.stringify(prevHeap[item]) !== JSON.stringify(s.h[item]));
+        }).join("");
+        return html ? `<div class="vz-row">${html}</div>` : "";
+      }).join("") || `<div class="muted" style="font-size:.85rem">No objects yet. Plain numbers, strings, booleans and None are shown right inside the frame.</div>`;
+      if (this.view === "trace") this.renderTrace();
       // output
       let out = esc(this.result.stdout.slice(0, s.o));
       if (last) out = esc(this.result.stdout);

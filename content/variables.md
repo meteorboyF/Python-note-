@@ -676,3 +676,235 @@ print("1000 round-trips OK")
 | 2 | (1, 0) | 0 | `['0','1','0']` |
 | 1 | (0, 1) | 1 | `['0','1','0','1']` → reversed `"1010"` |
 :::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Convert the temperature | LeetCode 2469 | https://leetcode.com/problems/convert-the-temperature/
+Write `convert_temperature(celsius)` that returns `[kelvin, fahrenheit]`, where Kelvin = Celsius + 273.15 and Fahrenheit = Celsius × 1.80 + 32.00.
+
+```text
+Input:  36.50        Output: [309.65, 97.70]
+Input:  122.11       Output: [395.26, 251.798]
+```
+:::starter
+```python norun
+def convert_temperature(celsius):
+    # return [kelvin, fahrenheit]
+    pass
+```
+:::tests
+```python norun
+assert all(abs(a - b) < 1e-5 for a, b in zip(convert_temperature(36.5), [309.65, 97.7]))
+assert all(abs(a - b) < 1e-5 for a, b in zip(convert_temperature(122.11), [395.26, 251.798]))
+assert all(abs(a - b) < 1e-5 for a, b in zip(convert_temperature(0), [273.15, 32.0]))
+assert isinstance(convert_temperature(10), list) and len(convert_temperature(10)) == 2
+```
+:::hint
+Floats are approximate, which is why the tests compare with a tolerance (`abs(a - b) < 1e-5`) instead of `==`.
+:::solution
+```python
+def convert_temperature(celsius):
+    kelvin = celsius + 273.15
+    fahrenheit = celsius * 1.80 + 32.00
+    return [kelvin, fahrenheit]
+
+print(convert_temperature(36.5))
+print(0.1 + 0.2)          # why the tests use a tolerance
+```
+:::explain
+Two arithmetic expressions, packed into a list. The real lesson is in the tests: `36.5 + 273.15` is stored in binary as roughly `309.65000000000003`, so an `==` check against `309.65` might fail. Comparing floats **within a tolerance** (here 10⁻⁵, or `math.isclose`) is the professional habit from this chapter.
+:::complexity
+O(1) time and space.
+:::end
+
+:::program basic | Type inspector | Real-world task
+Write `describe(x)` returning a tuple `(type_name, is_mutable, is_hashable)`.
+- `type_name` is the name of x's type, e.g. `"int"`.
+- `is_mutable` is False for the immutable built-ins (`int`, `float`, `complex`, `bool`, `str`, `tuple`, `frozenset`, `bytes`, `NoneType`) and True for everything else.
+- `is_hashable` is True if `hash(x)` succeeds.
+
+```text
+describe(3)        -> ("int", False, True)
+describe([1])      -> ("list", True, False)
+describe((1, [2])) -> ("tuple", False, False)   # immutable, but holds a list!
+```
+:::starter
+```python norun
+def describe(x):
+    pass
+```
+:::tests
+```python norun
+assert describe(3) == ("int", False, True)
+assert describe([1]) == ("list", True, False)
+assert describe((1, [2])) == ("tuple", False, False)
+assert describe((1, 2)) == ("tuple", False, True)
+assert describe(None) == ("NoneType", False, True)
+assert describe({1}) == ("set", True, False)
+assert describe(frozenset()) == ("frozenset", False, True)
+assert describe("hi") == ("str", False, True)
+assert describe({"a": 1}) == ("dict", True, False)
+```
+:::hint
+`type(x).__name__` gives the name. For hashability, use EAFP: `try: hash(x)` / `except TypeError:`.
+:::solution
+```python
+IMMUTABLE = (int, float, complex, bool, str, tuple, frozenset, bytes, type(None))
+
+def describe(x):
+    try:
+        hash(x)
+        hashable = True
+    except TypeError:
+        hashable = False
+    return type(x).__name__, not isinstance(x, IMMUTABLE), hashable
+
+for v in [3, [1], (1, [2]), (1, 2), None, {1}, "hi"]:
+    print(repr(v), "->", describe(v))
+```
+:::explain
+`isinstance` accepts a **tuple of types**, and `type(None)` is how you name `NoneType`. The interesting case is `(1, [2])`: the tuple is immutable (its slots can't change), but hashing it fails because it contains a list. Immutability is shallow, while hashability needs every item to be hashable. That one test captures the chapter's biggest idea.
+:::complexity
+O(size of x) for `hash` on containers, O(1) otherwise.
+:::end
+
+:::program medium | String to integer (atoi) | LeetCode 8 | https://leetcode.com/problems/string-to-integer-atoi/
+Implement `my_atoi(s)` (no `int()` on the whole string):
+1. Skip leading spaces.
+2. Read an optional `+` or `-` sign.
+3. Read digits until a non-digit or the end.
+4. Clamp the result to the 32-bit range [−2³¹, 2³¹ − 1]. If there are no digits, return 0.
+
+```text
+"42" -> 42      "   -42" -> -42     "4193 with words" -> 4193
+"words 987" -> 0     "-91283472332" -> -2147483648
+```
+:::starter
+```python norun
+def my_atoi(s):
+    pass
+```
+:::tests
+```python norun
+assert my_atoi("42") == 42
+assert my_atoi("   -42") == -42
+assert my_atoi("4193 with words") == 4193
+assert my_atoi("words and 987") == 0
+assert my_atoi("-91283472332") == -2147483648
+assert my_atoi("2147483648") == 2147483647
+assert my_atoi("+1") == 1
+assert my_atoi("") == 0
+assert my_atoi("  +0 123") == 0
+assert my_atoi("-+12") == 0
+```
+:::hint
+Walk an index `i` through the string. Build the number with `n = n * 10 + digit`, where `digit = ord(ch) - ord("0")`. Clamp once at the end with `max(lo, min(n, hi))`.
+:::solution
+```python
+def my_atoi(s):
+    i, n = 0, len(s)
+    while i < n and s[i] == " ":
+        i += 1
+    sign = 1
+    if i < n and s[i] in "+-":
+        sign = -1 if s[i] == "-" else 1
+        i += 1
+    num = 0
+    while i < n and s[i].isdigit():
+        num = num * 10 + (ord(s[i]) - ord("0"))
+        i += 1
+    lo, hi = -2**31, 2**31 - 1
+    return max(lo, min(sign * num, hi))
+
+for s in ["42", "   -42", "4193 with words", "-91283472332", "  +0 123"]:
+    print(repr(s), "->", my_atoi(s))
+```
+:::explain
+This is a tiny **parser**: a cursor `i` moves through phases (spaces → sign → digits) and stops at the first character that doesn't fit. `ord(ch) - ord("0")` converts a digit character to its value. Python ints never overflow, so we build the full number and clamp at the end. In C or Java you'd have to check for overflow **before** each multiply.
+:::trace
+`"  -42x"`:
+| Phase | i | char | num | sign |
+|---|---|---|---|---|
+| spaces | 0→2 | ' ' | 0 | 1 |
+| sign | 2→3 | '-' | 0 | -1 |
+| digit | 3→4 | '4' | 4 | -1 |
+| digit | 4→5 | '2' | 42 | -1 |
+| stop | 5 | 'x' | → **-42** | |
+:::complexity
+O(n) time, O(1) space.
+:::end
+
+:::program hard | Integer to English words | LeetCode 273 | https://leetcode.com/problems/integer-to-english-words/
+Convert a non-negative integer `num` (< 2³¹) to its English words representation.
+
+```text
+123      -> "One Hundred Twenty Three"
+12345    -> "Twelve Thousand Three Hundred Forty Five"
+1234567  -> "One Million Two Hundred Thirty Four Thousand Five Hundred Sixty Seven"
+```
+:::starter
+```python norun
+def number_to_words(num):
+    pass
+```
+:::tests
+```python norun
+assert number_to_words(0) == "Zero"
+assert number_to_words(5) == "Five"
+assert number_to_words(13) == "Thirteen"
+assert number_to_words(100) == "One Hundred"
+assert number_to_words(123) == "One Hundred Twenty Three"
+assert number_to_words(12345) == "Twelve Thousand Three Hundred Forty Five"
+assert number_to_words(1234567) == "One Million Two Hundred Thirty Four Thousand Five Hundred Sixty Seven"
+assert number_to_words(1000010) == "One Million Ten"
+assert number_to_words(2147483647) == "Two Billion One Hundred Forty Seven Million Four Hundred Eighty Three Thousand Six Hundred Forty Seven"
+```
+:::hint
+English groups digits in **threes**: billion, million, thousand, and then the rest. Write a helper that converts 0–999, then combine the chunks with their scale words, skipping chunks that are zero.
+:::solution
+```python
+ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+        "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+SCALES = [(10**9, "Billion"), (10**6, "Million"), (10**3, "Thousand"), (1, "")]
+
+def three(n):                        # 0..999 -> list of words
+    words = []
+    if n >= 100:
+        words += [ONES[n // 100], "Hundred"]
+        n %= 100
+    if n >= 20:
+        words.append(TENS[n // 10])
+        n %= 10
+    if n:
+        words.append(ONES[n])
+    return words
+
+def number_to_words(num):
+    if num == 0:
+        return "Zero"
+    words = []
+    for value, name in SCALES:
+        chunk, num = divmod(num, value)
+        if chunk:
+            words += three(chunk) + ([name] if name else [])
+    return " ".join(words)
+
+for n in [0, 13, 100, 12345, 1000010]:
+    print(n, "->", number_to_words(n))
+```
+:::explain
+The key insight is **decomposition**: every number is chunks of three digits with a scale word attached, so `three()` handles 0–999 (hundreds, then 20–90, then 1–19, since the teens are irregular). `divmod` peels off each scale from the top. Lists of words joined at the end avoid double spaces, which is the classic bug when building with string `+`. Zero chunks (the 0 thousands in 1,000,010) are skipped entirely.
+:::trace
+`1000010`:
+| scale | divmod | chunk words | words so far |
+|---|---|---|---|
+| Billion | (0, 1000010) | — | [] |
+| Million | (1, 10) | One + Million | One Million |
+| Thousand | (0, 10) | skipped | One Million |
+| (units) | (10, 0) | Ten | **One Million Ten** |
+:::complexity
+O(number of digits), so effectively O(1) for 32-bit inputs.
+:::end

@@ -29,7 +29,9 @@
   const SECTIONS = {
     hint: "💡 Hint", solution: "✅ Solution", explain: "🧠 Explanation", trace: "👣 Manual trace (step by step)",
     pitfalls: "⚠️ Common mistakes", variant: "🔁 Follow-up / variant", approach: "🧭 Approach",
+    starter: "Starter code", tests: "🧪 Test cases", complexity: "⏱️ Complexity",
   };
+  window.PROGRAM_REGISTRY = [];
   window.CODE_REGISTRY = [];
 
   const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -81,7 +83,7 @@
       if (fence) { if (f && line.trim().startsWith(fence)) fence = null; buf.push(line); i++; continue; }
       if (f) { fence = f; buf.push(line); i++; continue; }
       const m = line.match(/^:::(\w+)\s*(.*)$/);
-      if (m && m[1] === "problem") {
+      if (m && (m[1] === "problem" || m[1] === "program")) {
         flush();
         const [lvl, title, tags] = m[2].split("|").map(s => s.trim());
         const sections = [{ name: "statement", lines: [] }]; let inner = null; i++;
@@ -93,6 +95,11 @@
           const sm = l.match(/^:::(\w+)\s*(.*)$/);
           if (sm && SECTIONS[sm[1]]) { sections.push({ name: sm[1], title: sm[2], lines: [] }); i++; continue; }
           sections.at(-1).lines.push(l); i++;
+        }
+        if (m[1] === "program") {
+          const parts = m[2].split("|").map(s => s.trim());
+          out.push({ type: "program", level: (parts[0] || "basic").toLowerCase(), title: parts[1] || "Program", source: parts[2] || "", url: parts[3] || "", sections });
+          continue;
         }
         out.push({ type: "problem", level: (lvl || "basic").toLowerCase(), title: title || "Problem", tags: tags ? tags.split(",").map(s => s.trim()).filter(Boolean) : [], sections });
         continue;
@@ -146,9 +153,39 @@
       ${md(st.lines.join("\n"))}${rest}</div></article>`;
   }
 
+  const codeOf = (sec) => {
+    if (!sec) return "";
+    const m = sec.lines.join("\n").match(/```[^\n]*\n([\s\S]*?)```/);
+    return m ? m[1].replace(/\s+$/, "") : "";
+  };
+
+  function renderProgram(b, n, slug) {
+    const pid = `${slug}-w${n}`;
+    const get = name => b.sections.find(s => s.name === name);
+    const starter = codeOf(get("starter")) || "# write your solution here\n";
+    const tests = codeOf(get("tests")).split("\n").filter(l => l.trim() && !l.trim().startsWith("#"));
+    const idx = PROGRAM_REGISTRY.push({ starter, tests, pid }) - 1;
+    const lvlName = { basic: "Basic", easy: "Basic", medium: "Medium", hard: "Hard" }[b.level] || b.level;
+    const lvlCls = b.level === "easy" ? "basic" : b.level;
+    const src = b.source ? `<span class="src">${b.url ? `<a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.source)} ↗</a>` : esc(b.source)}</span>` : "";
+    const rest = b.sections.slice(1).filter(s => s.name !== "starter").map(s => {
+      const label = s.name === "tests" ? `🧪 Test cases (${tests.length})` : SECTIONS[s.name];
+      return `<details data-sec="${s.name}"><summary>${label}</summary><div class="dbody">${md(s.lines.join("\n"))}</div></details>`;
+    }).join("");
+    return `<article class="program" id="${pid}" data-prog="${idx}">
+      <header><span class="lvl ${lvlCls}">${lvlName}</span><h3>✍️ ${marked.parseInline(b.title)}</h3>${src}
+        <label class="solve-toggle"><input type="checkbox" data-pid="${pid}"> Solved</label></header>
+      <div class="pbody">${md(b.sections[0].lines.join("\n"))}
+        <div class="editor"><div class="bar"><span>your solution</span><span class="sp"></span>
+          <button class="run" data-pa="test">▶ Run tests</button><button data-pa="viz">👣 Visualise my code</button><button data-pa="reset">↺ Reset</button></div>
+          <textarea spellcheck="false" aria-label="Code editor">${esc(starter)}</textarea>
+          <div class="test-out" hidden></div></div>
+        ${rest}</div></article>`;
+  }
+
   window.renderContent = function (src, slug) {
-    CODE_REGISTRY.length = 0; quizN = 0;
-    const blocks = tokenize(src); let pn = 0;
+    CODE_REGISTRY.length = 0; PROGRAM_REGISTRY.length = 0; quizN = 0;
+    const blocks = tokenize(src); let pn = 0, wn = 0;
     return blocks.map(b => {
       if (b.type === "md") return md(b.text);
       if (b.type === "quiz") return renderQuiz(b);
@@ -156,6 +193,7 @@
         return `<div class="callout ${b.kind}"><div class="ct"><span class="ic">${CALLOUTS[b.kind]}</span>${b.title ? marked.parseInline(b.title) : ""}</div>${md(b.text)}</div>`;
       }
       if (b.type === "problem") return renderProblem(b, ++pn, slug);
+      if (b.type === "program") return renderProgram(b, ++wn, slug);
       return "";
     }).join("\n");
   };

@@ -70,6 +70,17 @@ class Tracer:
         c = t.__name__
         mod = getattr(t, "__module__", "") or ""
         try:
+            if mod.startswith("numpy") and c == "ndarray" and v.ndim in (1, 2) and v.size <= 240:
+                rows = v.reshape(1, -1) if v.ndim == 1 else v
+                cells = [[_short(repr(x.item()) if hasattr(x, "item") else repr(x), 12) for x in r] for r in rows]
+                return {"t": "grid", "c": f"ndarray shape={tuple(v.shape)} dtype={v.dtype}", "v": cells, "d": v.ndim}
+            if mod.startswith("pandas") and c in ("DataFrame", "Series") and len(v) <= 14:
+                df = v.to_frame() if c == "Series" else v
+                if df.shape[1] <= 8:
+                    return {"t": "table", "c": f"{c} shape={tuple(v.shape)}",
+                            "cols": [_short(str(x), 14) for x in df.columns],
+                            "idx": [_short(str(x), 14) for x in df.index],
+                            "rows": [[_short(str(x), 14) for x in row] for row in df.itertuples(index=False)]}
             if mod.startswith(("numpy", "pandas", "matplotlib")):
                 head = c
                 shape = getattr(v, "shape", None)
@@ -139,7 +150,7 @@ class Tracer:
         src = fr.f_globals if is_module else fr.f_locals
         out = []
         for k, v in list(src.items()):
-            if k in HIDDEN or k.startswith(".") or k.startswith("_pn_"):
+            if k in HIDDEN or k.startswith(".") or k.startswith("_pn_") or (k.startswith("__") and k.endswith("__")):
                 continue
             if is_module:
                 if isinstance(v, types.ModuleType):
