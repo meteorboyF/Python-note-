@@ -348,6 +348,55 @@ print({n: round(r, 3) for n, r in sorted(rank.items(), key=lambda kv: -kv[1])})
 | 9 | Processing stale heap entries in Dijkstra | `if d > dist[u]: continue` |
 | 10 | Building an O(V²) matrix for sparse graphs | adjacency list |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+from collections import deque
+g = {"A": ["B", "C"], "B": ["D"], "C": ["D"], "D": []}
+order, seen, q = [], {"A"}, deque(["A"])
+while q:
+    u = q.popleft(); order.append(u)
+    for v in g[u]:
+        if v not in seen:
+            seen.add(v); q.append(v)
+print(order)
+```
+What prints?
+- [x] `['A', 'B', 'C', 'D']`
+- [ ] `['A', 'B', 'D', 'C']`
+- [ ] `['A', 'B', 'C', 'D', 'D']`
+BFS visits level by level: A, then its neighbours B and C, then D. D appears only once because it's marked **seen when enqueued**. A DFS would give `A B D C`.
+:::
+
+:::quiz
+Which algorithm fits "minimum number of moves" on an **unweighted** grid or graph?
+- [x] BFS
+- [ ] DFS
+- [ ] Dijkstra is required
+BFS explores in order of distance (in edges), so the first time it reaches the target is the shortest path. Dijkstra also works, but it's slower and needed only when the edges have **different** non-negative weights.
+:::
+
+:::quiz
+```python norun
+parent = list(range(5))
+def find(x):
+    while parent[x] != x:
+        x = parent[x]
+    return x
+for a, b in [(0, 1), (1, 2), (3, 4)]:
+    parent[find(a)] = find(b)
+print(find(0) == find(2), find(0) == find(3), len({find(i) for i in range(5)}))
+```
+What prints?
+- [x] `True False 2`
+- [ ] `True True 1`
+- [ ] `False False 3`
+Union-Find merges sets via their roots. After the unions, {0, 1, 2} and {3, 4} are the two components: 0 and 2 share a root, 0 and 3 don't.
+:::
+
 ## Practice problems
 
 :::problem basic | Find if a path exists | BFS / DSU
@@ -601,4 +650,173 @@ print(cheapest(4, flights, 0, 3, 1), cheapest(4, flights, 0, 3, 2), cheapest(3, 
 ```
 :::explain
 After round `i` of Bellman–Ford, `cost[v]` is the cheapest price using **at most i edges**, provided each round reads only the previous round's values (hence the `nxt = cost[:]` copy). Without the copy, a single round could chain several edges and break the stop limit. k+1 rounds cover k stops: O(k·E).
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Find center of star graph | LeetCode 1791 | https://leetcode.com/problems/find-center-of-star-graph/
+A star graph has one center connected to every other node. Given its edge list, return the center in O(1).
+:::starter
+```python norun
+def find_center(edges):
+    pass
+```
+:::tests
+```python norun
+assert find_center([[1, 2], [2, 3], [4, 2]]) == 2
+assert find_center([[1, 2], [5, 1], [1, 3], [1, 4]]) == 1
+assert find_center([[9, 7], [7, 3]]) == 7
+```
+:::solution
+```python
+def find_center(edges):
+    (a, b), (c, d) = edges[0], edges[1]
+    return a if a in (c, d) else b
+
+print(find_center([[1, 2], [2, 3], [4, 2]]))
+```
+:::explain
+The center appears in **every** edge, so it must be the node shared by the first two edges. Nested tuple unpacking reads both pairs at once. Thinking about the structure beats the generic "count degrees" approach, which would be O(n).
+:::complexity
+O(1).
+:::end
+
+:::program medium | Number of islands | LeetCode 200 | https://leetcode.com/problems/number-of-islands/
+Count the islands (4-directionally connected groups of `"1"`s) in a grid. Use an iterative DFS or BFS, not recursion.
+:::starter
+```python norun
+def num_islands(grid):
+    pass
+```
+:::tests
+```python norun
+g1 = [list("11110"), list("11010"), list("11000"), list("00000")]
+g2 = [list("11000"), list("11000"), list("00100"), list("00011")]
+assert num_islands(g1) == 1 and num_islands(g2) == 3
+assert num_islands([["0"]]) == 0 and num_islands([["1"]]) == 1
+big = [["1"] * 200 for _ in range(200)]
+assert num_islands(big) == 1
+```
+:::hint
+Scan every cell. On an unvisited `"1"`, count a new island and **flood** it: mark every connected land cell as visited using an explicit stack.
+:::solution
+```python
+def num_islands(grid):
+    R, C = len(grid), len(grid[0])
+    seen = set()
+    count = 0
+    for r in range(R):
+        for c in range(C):
+            if grid[r][c] == "1" and (r, c) not in seen:
+                count += 1
+                stack = [(r, c)]
+                seen.add((r, c))
+                while stack:
+                    i, j = stack.pop()
+                    for ni, nj in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)):
+                        if 0 <= ni < R and 0 <= nj < C and grid[ni][nj] == "1" and (ni, nj) not in seen:
+                            seen.add((ni, nj))
+                            stack.append((ni, nj))
+    return count
+
+print(num_islands([list("11000"), list("11000"), list("00100"), list("00011")]))
+```
+:::explain
+A grid is an **implicit graph**: cells are nodes, and land neighbours are edges. Each flood fill explores one **connected component**, so the number of fills is the number of islands. The explicit stack avoids `RecursionError` on the 40,000-cell island in the tests, and marking cells seen when **pushed** prevents duplicates.
+:::complexity
+O(R·C).
+:::end
+
+:::program medium | Course schedule | LeetCode 207 | https://leetcode.com/problems/course-schedule/
+`prerequisites[i] = [a, b]` means you must take `b` before `a`. Can you finish all `num_courses` courses? This is cycle detection in a directed graph.
+:::starter
+```python norun
+def can_finish(num_courses, prerequisites):
+    pass
+```
+:::tests
+```python norun
+assert can_finish(2, [[1, 0]]) is True
+assert can_finish(2, [[1, 0], [0, 1]]) is False
+assert can_finish(5, [[1, 0], [2, 1], [3, 2], [4, 3]]) is True
+assert can_finish(3, [[0, 1], [1, 2], [2, 0]]) is False
+assert can_finish(4, []) is True
+```
+:::solution
+```python
+from collections import deque
+
+def can_finish(num_courses, prerequisites):
+    adj = [[] for _ in range(num_courses)]
+    indeg = [0] * num_courses
+    for a, b in prerequisites:
+        adj[b].append(a)
+        indeg[a] += 1
+    q = deque(i for i in range(num_courses) if indeg[i] == 0)
+    taken = 0
+    while q:
+        u = q.popleft()
+        taken += 1
+        for v in adj[u]:
+            indeg[v] -= 1
+            if indeg[v] == 0:
+                q.append(v)
+    return taken == num_courses
+
+print(can_finish(2, [[1, 0]]), can_finish(2, [[1, 0], [0, 1]]))
+```
+:::explain
+**Kahn's algorithm**: repeatedly take a course with no remaining prerequisites (in-degree 0), then "complete" it by decrementing its dependents. If a cycle exists, the courses in it never reach in-degree 0, so `taken` comes up short. It's the same algorithm that produces a topological order (LeetCode 210).
+:::trace
+`3, [[0,1],[1,2],[2,0]]`:
+| step | in-degrees | queue | taken |
+|---|---|---|---|
+| start | [1, 1, 1] | empty | 0 → **False** (every course waits on another) |
+:::complexity
+O(V + E).
+:::end
+
+:::program hard | Swim in rising water | LeetCode 778 | https://leetcode.com/problems/swim-in-rising-water/
+`grid[r][c]` is an elevation. At time `t` you can swim through cells with elevation ≤ t. Return the minimum `t` needed to get from the top-left to the bottom-right corner.
+:::starter
+```python norun
+import heapq
+
+def swim_in_water(grid):
+    pass
+```
+:::tests
+```python norun
+assert swim_in_water([[0, 2], [1, 3]]) == 3
+assert swim_in_water([[0, 1, 2, 3, 4], [24, 23, 22, 21, 5], [12, 13, 14, 15, 16], [11, 17, 18, 19, 20], [10, 9, 8, 7, 6]]) == 16
+assert swim_in_water([[0]]) == 0
+assert swim_in_water([[3, 2], [0, 1]]) == 3
+```
+:::hint
+The cost of a path is the **maximum** elevation on it, and we want to minimise that. Run Dijkstra where the "distance" is `max(current, grid[nr][nc])` instead of a sum.
+:::solution
+```python
+import heapq
+
+def swim_in_water(grid):
+    n = len(grid)
+    heap = [(grid[0][0], 0, 0)]               # (highest elevation so far, r, c)
+    seen = {(0, 0)}
+    while heap:
+        t, r, c = heapq.heappop(heap)
+        if (r, c) == (n - 1, n - 1):
+            return t
+        for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+            if 0 <= nr < n and 0 <= nc < n and (nr, nc) not in seen:
+                seen.add((nr, nc))
+                heapq.heappush(heap, (max(t, grid[nr][nc]), nr, nc))
+
+print(swim_in_water([[0, 1, 2, 3, 4], [24, 23, 22, 21, 5], [12, 13, 14, 15, 16], [11, 17, 18, 19, 20], [10, 9, 8, 7, 6]]))
+```
+:::explain
+This is Dijkstra with a different path cost: the **bottleneck** (the maximum along the path) instead of the sum. Dijkstra still works because the cost never decreases as a path extends (`max` is monotonic), so the first time we pop the target, its value is optimal. Union-Find and binary search on t are valid alternatives, and recognising the "minimise the maximum" shape is the real skill.
+:::complexity
+O(n² log n).
 :::end

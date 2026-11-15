@@ -443,6 +443,58 @@ Decision trees, random forests and gradient-boosted trees (XGBoost, LightGBM) pr
 | 9 | Forgetting the two-child case in BST delete | the in-order successor |
 | 10 | `list.index` inside recursive tree building → O(n²) | precompute a value→index dict |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+class T:
+    def __init__(self, v, l=None, r=None): self.v, self.l, self.r = v, l, r
+def walk(n, out):
+    if n:
+        walk(n.l, out); out.append(n.v); walk(n.r, out)
+    return out
+root = T(4, T(2, T(1), T(3)), T(6, T(5), T(7)))
+print(walk(root, []))
+```
+Which traversal is this, and what prints?
+- [x] in-order: `[1, 2, 3, 4, 5, 6, 7]`
+- [ ] pre-order: `[4, 2, 1, 3, 6, 5, 7]`
+- [ ] post-order: `[1, 3, 2, 5, 7, 6, 4]`
+Left, **node**, right is **in-order**. On a binary search tree, in-order always visits the values in sorted order, which is the most useful BST fact in interviews.
+:::
+
+:::quiz
+```python norun
+class T:
+    def __init__(self, v, l=None, r=None): self.v, self.l, self.r = v, l, r
+def height(n):
+    return -1 if n is None else 1 + max(height(n.l), height(n.r))
+print(height(None), height(T(1)), height(T(1, T(2, T(3)))))
+```
+What prints?
+- [x] `-1 0 2`
+- [ ] `0 1 3`
+- [ ] `0 0 2`
+With the **edges** convention, an empty tree has height −1, a single node has height 0, and a chain of 3 nodes has height 2. (Some sources count **nodes** instead, giving 0, 1, 3, so always state your convention.)
+:::
+
+:::quiz
+Is this a valid BST?
+```text
+      5
+     / \
+    3   8
+       / \
+      4   9
+```
+- [ ] Yes, every node is between its own children
+- [x] No, 4 is in 5's right subtree but 4 < 5
+- [ ] Only if duplicates are allowed
+Checking only parent-child pairs isn't enough. **Every** node in the right subtree of 5 must be greater than 5. Validate with bounds passed down: `lo < node.val < hi`.
+:::
+
 ## Practice problems
 
 :::problem basic | Maximum depth | recursion template
@@ -730,4 +782,319 @@ print("kth/rank verified;", kth(root, 1), kth(root, 100), kth(root, 200), rank(r
 ```
 :::explain
 Storing `size` in each node lets us navigate by **counts**: if the left subtree has `left` nodes, the current node is the `(left+1)`-th smallest, and we go left or right (subtracting) accordingly. Insert updates the sizes on the way back up the recursion. This is an **order-statistic tree**: Redis sorted sets and database indexes use similar augmentations to answer "the 100th item" or "the rank of x" in logarithmic time.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Path sum | LeetCode 112 | https://leetcode.com/problems/path-sum/
+Return True if the tree has a **root-to-leaf** path whose values sum to `target_sum`. (`TreeNode` and `build_tree`, which takes level order with `None` gaps, are provided.)
+:::starter
+```python norun
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+def has_path_sum(root, target_sum):
+    pass
+```
+:::tests
+```python norun
+assert has_path_sum(build_tree([5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1]), 22) is True
+assert has_path_sum(build_tree([1, 2, 3]), 5) is False
+assert has_path_sum(build_tree([]), 0) is False
+assert has_path_sum(build_tree([1, 2]), 1) is False
+assert has_path_sum(build_tree([-2, None, -3]), -5) is True
+```
+:::solution
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+def has_path_sum(root, target_sum):
+    if root is None:
+        return False
+    if root.left is None and root.right is None:     # a leaf: is the path complete?
+        return root.val == target_sum
+    rest = target_sum - root.val
+    return has_path_sum(root.left, rest) or has_path_sum(root.right, rest)
+
+print(has_path_sum(build_tree([5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1]), 22))
+```
+:::explain
+Each call asks the subtree for the **remaining** sum. A path only counts if it ends at a **leaf**: in `[1, 2]` with target 1, the root alone isn't a leaf, so it's False. That's the classic trap. `or` short-circuits as soon as one side finds a path.
+:::complexity
+O(n) time, O(h) recursion stack.
+:::end
+
+:::program basic | Inorder traversal (iterative) | LeetCode 94 | https://leetcode.com/problems/binary-tree-inorder-traversal/
+Return the in-order traversal **without recursion**, using an explicit stack. It must handle a 5000-node degenerate (linked-list-shaped) tree, which would exceed the recursion limit.
+:::starter
+```python norun
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+def inorder_traversal(root):
+    pass
+```
+:::tests
+```python norun
+assert inorder_traversal(build_tree([1, None, 2, 3])) == [1, 3, 2]
+assert inorder_traversal(build_tree([])) == []
+assert inorder_traversal(build_tree([4, 2, 6, 1, 3, 5, 7])) == [1, 2, 3, 4, 5, 6, 7]
+deep = None
+for v in range(5000): deep = TreeNode(v, deep)
+assert inorder_traversal(deep) == list(range(5000))
+```
+:::hint
+Push nodes while walking **left**. When you can't go further left, pop a node, record it, then move to its **right** child.
+:::solution
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+def inorder_traversal(root):
+    out, stack, node = [], [], root
+    while stack or node:
+        while node:                 # dive left, remembering the path
+            stack.append(node)
+            node = node.left
+        node = stack.pop()          # the leftmost unvisited node
+        out.append(node.val)
+        node = node.right           # then its right subtree
+    return out
+
+print(inorder_traversal(build_tree([4, 2, 6, 1, 3, 5, 7])))
+```
+:::explain
+The explicit stack holds exactly what the recursion's call stack would: the ancestors still waiting for their turn. Since it's a list on the heap rather than Python frames, depth is limited only by memory, so the 5000-level tree works. Visualise it and watch the stack grow while diving left and shrink while climbing back.
+:::complexity
+O(n) time, O(h) stack.
+:::end
+
+:::program medium | Level order traversal | LeetCode 102 | https://leetcode.com/problems/binary-tree-level-order-traversal/
+Return the node values level by level: `[[3], [9, 20], [15, 7]]`. Then return the **zigzag** version (alternating left-to-right and right-to-left) from a second function, `zigzag_level_order`.
+:::starter
+```python norun
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+def level_order(root):
+    pass
+
+def zigzag_level_order(root):
+    pass
+```
+:::tests
+```python norun
+t = build_tree([3, 9, 20, None, None, 15, 7])
+assert level_order(t) == [[3], [9, 20], [15, 7]]
+assert zigzag_level_order(t) == [[3], [20, 9], [15, 7]]
+assert level_order(None) == [] and zigzag_level_order(None) == []
+assert zigzag_level_order(build_tree([1, 2, 3, 4, 5, 6, 7])) == [[1], [3, 2], [4, 5, 6, 7]]
+```
+:::solution
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+from collections import deque
+
+def level_order(root):
+    if not root:
+        return []
+    out, q = [], deque([root])
+    while q:
+        level = []
+        for _ in range(len(q)):            # exactly the nodes of this level
+            node = q.popleft()
+            level.append(node.val)
+            q.extend(c for c in (node.left, node.right) if c)
+        out.append(level)
+    return out
+
+def zigzag_level_order(root):
+    return [lvl if i % 2 == 0 else lvl[::-1] for i, lvl in enumerate(level_order(root))]
+
+print(level_order(build_tree([3, 9, 20, None, None, 15, 7])))
+```
+:::explain
+`for _ in range(len(q))` freezes the queue length **before** the loop, so we process exactly one level while the children queue up behind it. That's the standard BFS-by-levels idiom. The zigzag version reuses it and reverses every odd level, building on an existing solution instead of writing a second traversal.
+:::complexity
+O(n).
+:::end
+
+:::program hard | Vertical order traversal | LeetCode 987 | https://leetcode.com/problems/vertical-order-traversal-of-a-binary-tree/
+The root is at `(row 0, col 0)`, the left child at `(row+1, col−1)` and the right child at `(row+1, col+1)`. Return the columns from left to right. Within a column, sort by row, and break ties at the same `(row, col)` by **value**.
+:::starter
+```python norun
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+def vertical_traversal(root):
+    pass
+```
+:::tests
+```python norun
+assert vertical_traversal(build_tree([3, 9, 20, None, None, 15, 7])) == [[9], [3, 15], [20], [7]]
+assert vertical_traversal(build_tree([1, 2, 3, 4, 5, 6, 7])) == [[4], [2], [1, 5, 6], [3], [7]]
+assert vertical_traversal(build_tree([1, 2, 3, 4, 6, 5, 7])) == [[4], [2], [1, 5, 6], [3], [7]]
+assert vertical_traversal(build_tree([7])) == [[7]]
+```
+:::hint
+Collect `(col, row, val)` tuples with any traversal, then **sort them once**. Tuple ordering gives column, then row, then value, which is exactly the required order. Then group by column.
+:::solution
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+def build_tree(vals):                      # LeetCode-style level order, None = missing
+    if not vals or vals[0] is None:
+        return None
+    from collections import deque
+    it = iter(vals)
+    root = TreeNode(next(it))
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        for side in ("left", "right"):
+            v = next(it, None)
+            if v is not None:
+                setattr(node, side, TreeNode(v))
+                q.append(getattr(node, side))
+    return root
+from itertools import groupby
+
+def vertical_traversal(root):
+    cells = []
+    stack = [(root, 0, 0)] if root else []
+    while stack:
+        node, row, col = stack.pop()
+        cells.append((col, row, node.val))
+        if node.left:
+            stack.append((node.left, row + 1, col - 1))
+        if node.right:
+            stack.append((node.right, row + 1, col + 1))
+    cells.sort()                                   # col, then row, then value
+    return [[val for _, _, val in grp] for _, grp in groupby(cells, key=lambda c: c[0])]
+
+print(vertical_traversal(build_tree([1, 2, 3, 4, 6, 5, 7])))
+```
+:::explain
+The rules sound fiddly, but they're precisely **lexicographic order on `(col, row, val)`**, so one sort does all the work, and the traversal order no longer matters (here an iterative DFS). `groupby` then splits the sorted list into columns, since equal columns are adjacent. Turning a multi-rule ordering into a tuple key is a powerful general technique.
+:::complexity
+O(n log n).
 :::end
