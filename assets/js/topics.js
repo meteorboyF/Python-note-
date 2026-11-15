@@ -75,6 +75,17 @@ window.PARTS = [
       { slug: "pro-python", title: "Pythonic Code, Typing, Testing & Concurrency", desc: "Idioms, PEP 8, type hints, pytest, venv, threads/processes/asyncio.", isNew: true },
     ],
   },
+  {
+    id: "practice", title: "Part 7 · Practice Sets",
+    blurb: "Topic-wise drills with your inputs and expected outputs. Write the code, run the tests, step through the solution.",
+    topics: [
+      { slug: "practice-lists", title: "Practice · Lists", desc: "16 problems: dedupe, filter, rotate, flatten, normalise, running totals.", isNew: true },
+      { slug: "practice-tuples", title: "Practice · Tuples", desc: "15 problems: unpacking, sorting records, zip(*), all/any, slicing.", isNew: true },
+      { slug: "practice-dicts", title: "Practice · Dictionaries", desc: "15 problems: counting, merging, inverting, grouping, safe lookups.", isNew: true },
+      { slug: "practice-oop", title: "Practice · OOP Classes", desc: "16 write-the-class problems: static/class methods, __str__, objects working together.", isNew: true },
+      { slug: "practice-data", title: "Practice · NumPy → Pandas → Matplotlib", desc: "16 mini data projects: compute with NumPy, tabulate with pandas, chart with Matplotlib.", isNew: true },
+    ],
+  },
 ];
 window.ALL_TOPICS = window.PARTS.flatMap((p, pi) => p.topics.map(t => ({ ...t, part: p })));
 window.ALL_TOPICS.forEach((t, i) => (t.n = i + 1));

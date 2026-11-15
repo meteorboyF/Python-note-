@@ -134,7 +134,7 @@
     tocSpy();
   }
   // ---------- code cards: Output · Breakdown · Visualise (precomputed traces) ----------
-  const TRACE_V = "6";
+  const TRACE_V = "8";
   const traceCache = new Map();
   const loadTraces = slug => {
     if (!traceCache.has(slug)) traceCache.set(slug, fetch(`traces/${slug}.json?v=${TRACE_V}`).then(r => (r.ok ? r.json() : {})).catch(() => ({})));
@@ -408,6 +408,7 @@
       const [pass, total] = (sum.match(/(\d+)\/(\d+)/) || [0, 0, 0]).slice(1).map(Number);
       const all = total > 0 && pass === total && !r.error;
       html += `<span class="sum">${all ? "🎉 All tests passed! Marked as solved." : total ? `${pass}/${total} tests passed. Keep going!` : "Your code didn't finish running. Check the error above."}</span>`;
+      if (r.figures && r.figures.length) html += `<div class="test-figs"><b>📊 Your chart</b>${r.figures.map(b => `<img alt="your chart" src="data:image/png;base64,${b}">`).join("")}</div>`;
       out.innerHTML = html;
       if (all) {
         const cb = card.querySelector("input[type=checkbox]");

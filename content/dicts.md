@@ -369,6 +369,10 @@ What prints?
 Dicts preserve **insertion order** (since 3.7). Deleting `b` and re-inserting it puts it at the end. Updating an *existing* key keeps its position.
 :::
 
+:::tip 🏋️ More practice
+15 extra dictionary problems: **[Practice · Dictionaries](#/t/practice-dicts)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Two Sum | hash map lookup

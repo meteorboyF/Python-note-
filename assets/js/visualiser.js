@@ -11,7 +11,7 @@
   function emitStatus(msg) { statusListeners.forEach(fn => fn(msg)); }
   function getWorker() {
     if (worker) return worker;
-    worker = new Worker("assets/js/tracer-worker.js?v=6", { type: "module" });
+    worker = new Worker("assets/js/tracer-worker.js?v=8", { type: "module" });
     ready = false;
     worker.onmessage = (e) => {
       const m = e.data;
@@ -495,6 +495,7 @@
                <div class="vz-step" aria-live="polite"></div>`}
         </div>
         <div class="vz-right">
+          <div class="vz-fig" hidden><h4>📊 The figure after this step <span class="muted">(watch it build up line by line)</span></h4><img alt="the matplotlib figure at this step"></div>
           <div class="vz-trace" ${this.showTable && !this.editing ? "" : "hidden"}></div>
           <div class="vz-memh">🧠 Memory <span class="muted">after this step · names on the left point to objects on the right</span></div>
           <div class="vz-canvas"><svg class="arrows"></svg>
@@ -762,7 +763,17 @@
       let out = esc(r.stdout.slice(0, a.o));
       if (last) { out = esc(r.stdout); if (r.error) out += `<span class="err">${out && !out.endsWith("\n") ? "\n" : ""}${esc(r.error)}</span>`; }
       H.querySelector(".vz-out pre").innerHTML = out || `<span class="muted">(nothing printed yet)</span>`;
-      H.querySelector(".vz-out .figs").innerHTML = last ? (r.figures || []).map(b => `<img alt="figure" src="data:image/png;base64,${b}">`).join("") : "";
+      const figSrc = x => (/\.png$/.test(x) ? `traces/fig/${x}` : `data:image/png;base64,${x}`);
+      const finals = (r.figures && r.figures.length ? r.figures : r.figs || []);
+      H.querySelector(".vz-out .figs").innerHTML = last ? finals.map(b => `<img alt="figure" src="${figSrc(b)}">`).join("") : "";
+      // matplotlib: the figure as it looks right after this line
+      const figBox = H.querySelector(".vz-fig");
+      if (figBox) {
+        let fg; for (let k = Math.min(this.i + 1, this.steps.length - 1); k >= 0 && fg === undefined; k--) fg = this.steps[k].fg;
+        const src = last && finals.length ? figSrc(finals[finals.length - 1]) : fg !== undefined && r.figsteps && r.figsteps[fg] ? figSrc(r.figsteps[fg]) : "";
+        figBox.hidden = !src;
+        if (src) { const img = figBox.querySelector("img"); if (img.getAttribute("src") !== src) img.setAttribute("src", src); }
+      }
       const outBox = H.querySelector(".vz-out"); outBox.scrollTop = outBox.scrollHeight;
       requestAnimationFrame(() => drawArrows(this.canvas));
     }

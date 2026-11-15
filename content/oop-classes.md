@@ -295,6 +295,10 @@ What prints?
 Without `__eq__`, objects compare by **identity**, so two separately created objects are unequal even with the same data. They also hash by identity, so the set keeps both. Define `__eq__` + `__hash__` (or use `@dataclass(frozen=True)`) for value semantics.
 :::
 
+:::tip 🏋️ More practice
+16 write-the-class problems (Rectangle, BankAccount, Fraction, …): **[Practice · OOP Classes](#/t/practice-oop)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Bank account | __init__, methods, validation

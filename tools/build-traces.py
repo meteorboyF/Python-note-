@@ -179,6 +179,14 @@ def main():
                     f.write(base64.b64decode(b64))
                 figs.append(name)
             r["figs"] = figs
+            steps_figs = []
+            for n, b64 in enumerate(r.pop("figsteps", [])):
+                name = f"{slug}-{h}-s{n}.png"
+                with open(os.path.join(OUT, "fig", name), "wb") as f:
+                    f.write(base64.b64decode(b64))
+                steps_figs.append(name)
+            if steps_figs:
+                r["figsteps"] = steps_figs
             if "_mismatch" in r:
                 problems.append(f"{slug}:{h} OUTPUT DIFFERS {r.pop('_mismatch')}")
             delta_heaps(r["steps"])

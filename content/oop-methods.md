@@ -272,6 +272,10 @@ What prints?
 `a.hello` is a **bound method**: the function with `self` pre-filled, which you can store and call later. `A.hello(a)` is the same call written explicitly. `__self__` is the instance the method is bound to.
 :::
 
+:::tip 🏋️ More practice
+16 write-the-class problems using static and class methods: **[Practice · OOP Classes](#/t/practice-oop)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Alternative constructors | @classmethod

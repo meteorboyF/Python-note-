@@ -323,6 +323,10 @@ What prints?
 Pandas reductions **skip NaN** by default (`skipna=True`): the mean is (1+3)/2. `count()` counts the non-missing values, while `len` counts every row. NumPy's `np.sum` on a raw array would give `nan`.
 :::
 
+:::tip 🏋️ More practice
+16 mini data projects: **[Practice · NumPy → Pandas → Matplotlib](#/t/practice-data)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Department report | groupby + named aggregation

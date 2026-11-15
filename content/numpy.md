@@ -331,6 +331,10 @@ What prints?
 Element-wise `uint8` arithmetic **wraps around** silently (400 mod 256 = 144). But `sum()` promotes small integer types to the platform integer, so 300 is correct, and `mean()` uses float64. Overflow traps hit only the element-wise operations.
 :::
 
+:::tip 🏋️ More practice
+16 mini data projects: **[Practice · NumPy → Pandas → Matplotlib](#/t/practice-data)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Normalise each row to sum 1 | broadcasting, keepdims

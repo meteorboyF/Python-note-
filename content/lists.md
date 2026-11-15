@@ -323,6 +323,10 @@ What prints?
 After removing the first 2, everything shifts left, and the iterator's next index skips the second 2. Never mutate a list while iterating over it: rebuild it with a comprehension, or loop over a copy.
 :::
 
+:::tip 🏋️ More practice
+16 extra list problems with your inputs and expected outputs: **[Practice · Lists](#/t/practice-lists)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Second largest distinct | single pass, edge cases

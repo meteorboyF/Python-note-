@@ -515,6 +515,10 @@ What prints?
 Setting limits explicitly **turns off autoscaling** for that axis, so plotting later doesn't change the x-range. The inverted y-axis stays inverted when autoscaling adds data.
 :::
 
+:::tip 🏋️ More practice
+16 mini data projects with chart-checking tests: **[Practice · NumPy → Pandas → Matplotlib](#/t/practice-data)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Your first complete chart | line, labels, legend, grid

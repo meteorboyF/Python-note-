@@ -254,6 +254,10 @@ What prints?
 Tuples compare **lexicographically**: first by element 0, and only on ties by element 1. That's why tuples are the go-to sort keys.
 :::
 
+:::tip 🏋️ More practice
+15 extra tuple problems: **[Practice · Tuples](#/t/practice-tuples)**. Each one has a test judge and a step-by-step solution.
+:::
+
 ## Practice problems
 
 :::problem basic | Min, max and mean in one return | tuple packing

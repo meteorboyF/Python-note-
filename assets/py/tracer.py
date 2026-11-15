@@ -41,7 +41,31 @@ class Tracer:
         self.keep = []  # keep objects alive so id() is never reused mid-run
         self.truncated = False
         self.cur = {}   # id(frame) -> index of the step of the line it is executing
+        self.snaps = []         # small PNGs of the current figure, whenever it changed
+        self._last_snap = None
+        self.snap_figs = False
         self.ev_total = 0
+
+    # ---------- matplotlib: how the figure looks at this step ----------
+    def snap(self, step):
+        plt = sys.modules.get("matplotlib.pyplot")
+        if plt is None or len(self.snaps) >= MAX_SNAPS:
+            return
+        try:
+            from matplotlib._pylab_helpers import Gcf
+            mans = Gcf.get_all_fig_managers()
+            if not mans:
+                return
+            fig = mans[-1].canvas.figure          # the newest figure, without changing plt.gcf()
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", dpi=SNAP_DPI)
+            data = buf.getvalue()
+        except Exception:
+            return
+        if data != self._last_snap:
+            self._last_snap = data
+            self.snaps.append(base64.b64encode(data).decode())
+        step["fg"] = len(self.snaps) - 1
 
     # ---------- sub-expression values, reported by the instrumented code ----------
     def ev(self, i, v, sub=None):
@@ -212,6 +236,8 @@ class Tracer:
             et, ev, _ = arg
             step["x"] = f"{et.__name__}: {ev}"
         self.steps.append(step)
+        if self.snap_figs:
+            self.snap(step)
         if event == "line":
             self.cur[id(frame)] = len(self.steps) - 1
 
@@ -240,6 +266,8 @@ class Tracer:
 import ast
 
 EV_PER_STEP = 16
+MAX_SNAPS = 60
+SNAP_DPI = 60
 EV_TOTAL = 3000
 
 OPS = {
@@ -736,6 +764,7 @@ def run_user(code, mode="trace", stdin=""):
     sys.stdout = sys.stderr = out
     builtins.input = fake_input
     tracer = Tracer(out)
+    tracer.snap_figs = mode == "trace" and "matplotlib" in code
     error = None
     err_line = None
     table, notes = [], {}
@@ -788,5 +817,6 @@ def run_user(code, mode="trace", stdin=""):
         "truncated": tracer.truncated,
         "figures": figs,
         "ex": table,
+        "figsteps": tracer.snaps,
         "stx": notes,
     })
