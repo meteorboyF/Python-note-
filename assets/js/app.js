@@ -284,47 +284,24 @@
 
   // ---------- write-a-program cards: editor, tests, visualise ----------
   const pyStr = s => JSON.stringify(s);                 // JSON string literals are valid Python strings
-  function testHarness(tests) {
-    return `
-_pn_tests = [${tests.map(pyStr).join(", ")}]
-_pn_pass = _pn_total = 0
-for _pn_t in _pn_tests:
-    if not _pn_t.lstrip().startswith("assert"):
-        exec(_pn_t, globals()); continue
-    _pn_total += 1
-    try:
-        exec(_pn_t, globals())
-        print("PASS  " + _pn_t); _pn_pass += 1
-    except AssertionError:
-        _pn_got = ""
-        if " == " in _pn_t:
-            try:
-                _pn_got = "\\n      got: " + repr(eval(_pn_t.strip()[7:].split(" == ", 1)[0], globals()))
-            except Exception:
-                pass
-        print("FAIL  " + _pn_t + _pn_got)
-    except Exception as _pn_e:
-        print("ERROR " + _pn_t + "\\n      " + type(_pn_e).__name__ + ": " + str(_pn_e))
-print(f"SUMMARY {_pn_pass}/{_pn_total}")
-`;
-  }
+  const HARNESS = "import ast as _pn_ast\ndef raises(_exc, _fn, *_a, **_k):\n    try:\n        _fn(*_a, **_k)\n    except _exc as _e:\n        return str(_e) or True\n    return False\n_pn_pass = _pn_total = 0\n_pn_failed = []\nfor _pn_node in _pn_ast.parse(_pn_src).body:\n    _pn_text = _pn_ast.get_source_segment(_pn_src, _pn_node)\n    _pn_code = compile(_pn_ast.Module([_pn_node], []), \"<tests>\", \"exec\")\n    if not isinstance(_pn_node, _pn_ast.Assert):\n        try:\n            exec(_pn_code, globals())\n        except Exception as _pn_e:\n            _pn_failed.append(_pn_text)\n            print(\"ERROR \" + _pn_text.splitlines()[0] + \"\\n      \" + type(_pn_e).__name__ + \": \" + str(_pn_e))\n        continue\n    _pn_total += 1\n    try:\n        exec(_pn_code, globals())\n        print(\"PASS  \" + _pn_text); _pn_pass += 1\n    except AssertionError:\n        _pn_got = \"\"\n        _pn_t = _pn_node.test\n        if isinstance(_pn_t, _pn_ast.Compare) and len(_pn_t.ops) == 1 and isinstance(_pn_t.ops[0], _pn_ast.Eq):\n            try:\n                _pn_got = \"\\n      got: \" + repr(eval(_pn_ast.get_source_segment(_pn_src, _pn_t.left), globals()))\n            except Exception:\n                pass\n        _pn_failed.append(_pn_text)\n        print(\"FAIL  \" + _pn_text + _pn_got)\n    except Exception as _pn_e:\n        _pn_failed.append(_pn_text)\n        print(\"ERROR \" + _pn_text + \"\\n      \" + type(_pn_e).__name__ + \": \" + str(_pn_e))\nprint(f\"SUMMARY {_pn_pass}/{_pn_total}\")\n";
+  const testHarness = (src) => "_pn_src = " + JSON.stringify(src) + "\n" + HARNESS;
+
   app.addEventListener("click", async e => {
     const b = e.target.closest(".program [data-pa]"); if (!b) return;
     const card = b.closest(".program"); const entry = PROGRAM_REGISTRY[+card.dataset.prog];
     const ta = card.querySelector("textarea"); const out = card.querySelector(".test-out");
     if (b.dataset.pa === "reset") { ta.value = entry.starter; store.set("pn-code-" + entry.pid, null); out.hidden = true; return; }
     if (b.dataset.pa === "viz") {
-      const calls = entry.tests.filter(t => t.startsWith("assert ") && t.includes(" == ")).slice(0, 2)
-        .map(t => `print(${t.slice(7).split(" == ")[0]})`);
-      const setup = entry.tests.filter(t => !t.startsWith("assert"));
-      Viz.open(ta.value.replace(/\s+$/, "") + "\n\n# --- sample calls from the tests ---\n" + [...setup, ...calls].join("\n") + "\n");
+      const helper = entry.testsSrc.includes("raises(") ? "def raises(_exc, _fn, *_a, **_k):\n    try:\n        _fn(*_a, **_k)\n    except _exc as _e:\n        return str(_e) or True\n    return False\n\n" : "";
+      Viz.open(helper + ta.value.replace(/\s+$/, "") + "\n\n# --- the tests (a failing assert stops the program) ---\n" + entry.testsSrc + "\n");
       return;
     }
     out.hidden = false;
     out.innerHTML = `<span class="muted">Running tests…</span>`;
     store.set("pn-code-" + entry.pid, ta.value);
     try {
-      const r = await Viz.execute(ta.value + "\n" + testHarness(entry.tests), "run");
+      const r = await Viz.execute(ta.value + "\n" + testHarness(entry.testsSrc), "run");
       const lines = r.stdout.split("\n");
       const sum = lines.find(l => l.startsWith("SUMMARY ")) || "";
       let html = lines.filter(l => !l.startsWith("SUMMARY ")).map(l =>

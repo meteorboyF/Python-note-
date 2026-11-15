@@ -250,6 +250,35 @@ print(sign)
 | 9 | `/` always float | `4 / 2 == 2.0` | `//` for int results |
 | 10 | `a += b` vs `a = a + b` on lists | aliases differ | know mutability |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+print(-7 // 2, -7 % 2, 7 // -2)
+```
+What prints?
+- [ ] `-3 -1 -3`
+- [x] `-4 1 -4`
+- [ ] `-4 -1 -3`
+`//` rounds toward −∞ (floor), so `-7 // 2` is `-4` and `7 // -2` is `-4`. The remainder takes the **divisor's** sign, so `-7 % 2` is `1`, which keeps `(-4) * 2 + 1 == -7` true.
+:::
+
+:::quiz
+```python norun
+x = 0
+y = x or "default"
+z = x and 1/0
+print(y, z)
+```
+What happens?
+- [ ] `ZeroDivisionError`
+- [ ] `default False`
+- [x] `default 0`
+`x or "default"` returns the first truthy operand, `"default"`. `x and 1/0` stops at the first falsy operand and **returns it**, which is `0`. The division never runs: that's short-circuiting.
+:::
+
 ## Practice problems
 
 :::problem basic | Seconds to H:M:S | divmod, floor division
@@ -524,4 +553,194 @@ print(wrap_add(127, 1), wrap_add(-128, -1), wrap_add(100, 100))  # -128 127 -56
 ```
 :::explain
 Saturation is just clamping: `max(lo, min(x, hi))`. For wrapping, shift the range up by `half` so it becomes `0..m-1`, take `% m` (always non-negative in Python for positive `m`), then shift back down. This is how NumPy `int8` arithmetic behaves. Python ints never overflow, so you have to simulate it.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Add digits | LeetCode 258 | https://leetcode.com/problems/add-digits/
+Repeatedly add all the digits of a non-negative integer until a single digit remains: `38 → 3 + 8 = 11 → 1 + 1 = 2`. Solve it first with a loop, then try to find the **O(1) formula** using `%`.
+:::starter
+```python norun
+def add_digits(num):
+    pass
+```
+:::tests
+```python norun
+assert add_digits(38) == 2
+assert add_digits(0) == 0
+assert add_digits(9) == 9
+assert add_digits(10) == 1
+assert add_digits(99999) == 9
+assert add_digits(123456789) == 9
+assert all(add_digits(n) == (0 if n == 0 else 1 + (n - 1) % 9) for n in range(500))
+```
+:::hint
+Loop version: while `num >= 10`, replace `num` with the sum of its digits (`num % 10` and `num //= 10`). Formula: a number and its digit sum leave the same remainder when divided by 9.
+:::solution
+```python
+def add_digits_loop(num):
+    while num >= 10:
+        total = 0
+        while num:
+            total += num % 10      # last digit
+            num //= 10             # drop the last digit
+        num = total
+    return num
+
+def add_digits(num):
+    return 0 if num == 0 else 1 + (num - 1) % 9      # the "digital root"
+
+print([add_digits_loop(n) for n in [38, 0, 99999]], [add_digits(n) for n in [38, 0, 99999]])
+```
+:::explain
+Since 10 ≡ 1 (mod 9), every power of 10 is ≡ 1 too, so `n = Σ dᵢ·10ⁱ ≡ Σ dᵢ (mod 9)`: summing digits never changes the remainder mod 9. The final single digit is therefore `n % 9`, except that multiples of 9 give 9, not 0. The `1 + (n - 1) % 9` form handles that shift neatly.
+:::trace
+`add_digits_loop(38)`:
+| num | total (inner loop) | new num |
+|---|---|---|
+| 38 | 8 + 3 = 11 | 11 |
+| 11 | 1 + 1 = 2 | 2 |
+| 2 | stop (< 10) | **2** |
+:::complexity
+Loop: O(log n) per pass. Formula: O(1).
+:::end
+
+:::program basic | Power of two | LeetCode 231 | https://leetcode.com/problems/power-of-two/
+Return True if `n` is a power of two (1, 2, 4, 8, …). Do it without loops or `math.log`, using a **bit trick**.
+:::starter
+```python norun
+def is_power_of_two(n):
+    pass
+```
+:::tests
+```python norun
+assert is_power_of_two(1) is True
+assert is_power_of_two(16) is True
+assert is_power_of_two(3) is False
+assert is_power_of_two(0) is False
+assert is_power_of_two(-8) is False
+assert is_power_of_two(2**60) is True
+assert is_power_of_two(2**60 + 1) is False
+```
+:::hint
+A power of two has exactly one `1` bit. What does `n - 1` look like in binary?
+:::solution
+```python
+def is_power_of_two(n):
+    return n > 0 and n & (n - 1) == 0
+
+for n in [1, 16, 3, 0, -8, 1024]:
+    print(n, bin(n), is_power_of_two(n))
+```
+:::explain
+`n = 1000₂` gives `n − 1 = 0111₂`: subtracting 1 flips the single set bit and all the zeros below it, so `n & (n − 1)` is 0. Any number with two or more set bits keeps its higher bit. `n > 0` excludes 0 and negatives. In Python, `&` binds tighter than `==`, so no extra parentheses are needed (adding them is still fine for readability).
+:::complexity
+O(1).
+:::end
+
+:::program medium | Divide two integers | LeetCode 29 | https://leetcode.com/problems/divide-two-integers/
+Divide `dividend` by `divisor` **without** `*`, `/`, `//` or `%`, truncating toward zero (`7 / -3 → -2`). Clamp the result to the 32-bit range [−2³¹, 2³¹ − 1]. It must be fast for huge inputs, so subtracting one divisor at a time is too slow.
+:::starter
+```python norun
+def divide(dividend, divisor):
+    pass
+```
+:::tests
+```python norun
+assert divide(10, 3) == 3
+assert divide(7, -3) == -2
+assert divide(-7, 3) == -2
+assert divide(0, 5) == 0
+assert divide(1, 1) == 1
+assert divide(-2147483648, -1) == 2147483647
+assert divide(-2147483648, 1) == -2147483648
+assert divide(2147483647, 2) == 1073741823
+```
+:::hint
+Work with absolute values. Double the divisor with `<<` until it's about to exceed what's left, subtract that big chunk, and add the matching power of two to the quotient. Fix the sign at the end.
+:::solution
+```python
+def divide(dividend, divisor):
+    INT_MAX, INT_MIN = 2**31 - 1, -2**31
+    negative = (dividend < 0) != (divisor < 0)
+    a, b = abs(dividend), abs(divisor)
+    q = 0
+    while a >= b:
+        shift = 0
+        while a >= (b << (shift + 1)):     # find the biggest b * 2^k that fits
+            shift += 1
+        a -= b << shift
+        q += 1 << shift
+    q = -q if negative else q
+    return max(INT_MIN, min(q, INT_MAX))
+
+print(divide(10, 3), divide(7, -3), divide(-2147483648, -1))
+```
+:::explain
+This is long division in **binary**: subtract the largest `b·2ᵏ` that fits, record the bit `2ᵏ`, and repeat. Each outer pass removes at least half of what's left, giving O(log² n) instead of O(n) subtractions. `(dividend < 0) != (divisor < 0)` is "signs differ", an XOR of booleans. The only overflow case, −2³¹ ÷ −1 = 2³¹, is clamped.
+:::trace
+`divide(10, 3)`:
+| a | biggest 3·2ᵏ ≤ a | q after |
+|---|---|---|
+| 10 | 3·2 = 6 (k=1) | 2 |
+| 4 | 3·1 = 3 (k=0) | 3 |
+| 1 | stop (1 < 3) | **3** |
+:::complexity
+O(log² n) time, O(1) space.
+:::end
+
+:::program hard | Basic calculator II | LeetCode 227 | https://leetcode.com/problems/basic-calculator-ii/
+Evaluate a string expression containing non-negative integers, `+ - * /` and spaces (no parentheses), respecting precedence. Integer division **truncates toward zero** (`-3/2 → -1` inside expressions like `1-3/2`). No `eval`.
+:::starter
+```python norun
+def calculate(s):
+    pass
+```
+:::tests
+```python norun
+assert calculate("3+2*2") == 7
+assert calculate(" 3/2 ") == 1
+assert calculate(" 3+5 / 2 ") == 5
+assert calculate("14-3/2") == 13
+assert calculate("2*3*4-10/3") == 21
+assert calculate("100") == 100
+assert calculate("1 - 1 + 1") == 1
+assert calculate("0-7/2") == -3
+```
+:::hint
+Keep a stack of **terms** that will be added at the end. `+n` pushes `n`, `-n` pushes `-n`, while `*` and `/` combine with the top of the stack right away (they bind tighter). Truncate with `int(a / b)`, not `//`.
+:::solution
+```python
+def calculate(s):
+    stack, num, op = [], 0, "+"
+    for i, ch in enumerate(s):
+        if ch.isdigit():
+            num = num * 10 + int(ch)
+        if (not ch.isdigit() and ch != " ") or i == len(s) - 1:
+            if op == "+":
+                stack.append(num)
+            elif op == "-":
+                stack.append(-num)
+            elif op == "*":
+                stack.append(stack.pop() * num)
+            else:
+                stack.append(int(stack.pop() / num))    # truncate toward zero
+            op, num = ch, 0
+    return sum(stack)
+
+print(calculate("3+2*2"), calculate("14-3/2"), calculate("0-7/2"))
+```
+:::explain
+Precedence without a parser: everything ends up as a sum of terms. When we finish reading a number, we apply the **previous** operator (`op`): `+`/`-` start a new term, `*`/`/` modify the last term immediately. That's why `3+2*2` becomes terms `[3, 4]`. The `i == len(s) - 1` check flushes the last number. Python's `//` floors (`-7 // 2 == -4`), but this problem wants truncation, hence `int(a / b)`, which is the Operators chapter's floor-vs-truncate trap in action.
+:::trace
+`"14-3/2"`:
+| read | op applied | stack |
+|---|---|---|
+| 14, then `-` | `+` → push 14 | [14] |
+| 3, then `/` | `-` → push −3 | [14, −3] |
+| 2 (end) | `/` → int(−3/2) = −1 | [14, −1] → sum **13** |
+:::complexity
+O(n) time, O(n) space for the stack.
 :::end

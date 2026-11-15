@@ -257,6 +257,52 @@ Modern async code uses `async def`/`await` instead (see *Pro Python*), but `send
 | 9 | `tee` caches everything if copies drift apart | use lists if you need random access |
 | 10 | Lazy `map` with side effects never runs | consume it, or use a for loop |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+squares = (x * x for x in range(4))
+print(sum(squares), sum(squares))
+```
+What prints?
+- [ ] `14 14`
+- [x] `14 0`
+- [ ] `TypeError`
+A generator is an **iterator**, so it's used up after one pass. The second `sum` sees an empty stream and returns 0.
+:::
+
+:::quiz
+```python norun
+def gen():
+    print("A")
+    yield 1
+    print("B")
+    yield 2
+g = gen()
+print("start")
+print(next(g))
+```
+What prints?
+- [ ] `A`, `start`, `1`
+- [x] `start`, `A`, `1`
+- [ ] `start`, `A`, `1`, `B`
+Calling `gen()` runs **nothing**: it only creates the generator. The body starts at the first `next()` and pauses at `yield 1`, so `"B"` is never printed here.
+:::
+
+:::quiz
+```python norun
+it = iter([1, 2, 3, 4])
+print(list(zip(it, it)))
+```
+What prints?
+- [ ] `[(1, 1), (2, 2), (3, 3), (4, 4)]`
+- [x] `[(1, 2), (3, 4)]`
+- [ ] `[(1, 2), (2, 3), (3, 4)]`
+Both arguments are the **same** iterator, so `zip` pulls 1 for the first slot and 2 for the second, then 3 and 4. That's the classic chunking trick: `zip(*[iter(xs)] * n)`.
+:::
+
 ## Practice problems
 
 :::problem basic | Fibonacci generator | yield, infinite streams
@@ -508,4 +554,228 @@ print([k for k, _ in my_groupby("aaabccd")])   # groups never consumed: still co
 ```
 :::explain
 The outer generator and the group generators share one underlying iterator plus a "current item" cell (the dict lets the inner generator rebind it, like `nonlocal`). Each group yields while the key matches. Before moving on, the outer loop **drains** the old group, so a caller that ignores a group (the last print) doesn't break the run boundaries. This mirrors CPython's real implementation and explains why `groupby`'s groups go invalid once you advance.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Take and drop | Real-world task
+Write generators `take(n, iterable)`, yielding the first `n` items, and `drop(n, iterable)`, yielding everything after the first `n`. They must work on **infinite** iterators and never build a list.
+:::starter
+```python norun
+def take(n, iterable):
+    pass
+
+def drop(n, iterable):
+    pass
+```
+:::tests
+```python norun
+import itertools
+assert list(take(3, "abcdef")) == ["a", "b", "c"]
+assert list(take(10, [1, 2])) == [1, 2]
+assert list(take(0, [1, 2])) == []
+assert list(drop(2, [1, 2, 3, 4])) == [3, 4]
+assert list(take(3, drop(5, itertools.count()))) == [5, 6, 7]
+assert list(drop(9, "ab")) == []
+assert hasattr(take(1, "x"), "__next__")
+```
+:::hint
+A generator function (one containing `yield`) automatically returns an iterator. For `drop`, call `iter()` once and advance that **same** iterator.
+:::solution
+```python
+def take(n, iterable):
+    if n <= 0:
+        return
+    for i, x in enumerate(iterable, 1):
+        yield x
+        if i == n:
+            return                      # stop pulling: important for infinite inputs
+
+def drop(n, iterable):
+    it = iter(iterable)
+    for _ in zip(range(n), it):        # advance the SAME iterator n times (stops early if it runs out)
+        pass
+    yield from it
+
+import itertools
+print(list(take(3, drop(5, itertools.count()))))
+```
+:::explain
+`take` returns right after yielding the n-th item, so it never asks an infinite iterator for item n+1. `drop` advances a **single** iterator n times. `zip(range(n), it)` pulls at most n items and stops cleanly if the input is shorter. Then `yield from` hands over the rest. The standard library equivalents are `itertools.islice(it, n)` and `itertools.islice(it, n, None)`.
+:::complexity
+O(n) for the skipped/taken items. O(1) memory.
+:::end
+
+:::program medium | Peeking iterator | LeetCode 284 | https://leetcode.com/problems/peeking-iterator/
+Design `PeekingIterator(iterable)` with `peek()` (return the next element without advancing), `next()` and `has_next()`. Also make it a real Python iterator (`__iter__`/`__next__`) so it works in `for` loops.
+:::starter
+```python norun
+class PeekingIterator:
+    def __init__(self, iterable):
+        pass
+    def peek(self):
+        pass
+    def next(self):
+        pass
+    def has_next(self):
+        pass
+```
+:::tests
+```python norun
+p = PeekingIterator([1, 2, 3])
+assert p.next() == 1 and p.peek() == 2 and p.peek() == 2 and p.next() == 2
+assert p.has_next() and p.next() == 3 and not p.has_next()
+q = PeekingIterator(x * x for x in range(4))
+assert q.peek() == 0 and list(q) == [0, 1, 4, 9]
+assert not PeekingIterator([]).has_next()
+r = PeekingIterator([None, 5])
+assert r.has_next() and r.peek() is None and r.next() is None and r.next() == 5
+```
+:::hint
+Always keep one item **buffered**. Use a private sentinel object (not `None`) to mean "exhausted", because `None` can be a real value (last test).
+:::solution
+```python
+_END = object()
+
+class PeekingIterator:
+    def __init__(self, iterable):
+        self._it = iter(iterable)
+        self._buf = next(self._it, _END)        # look one item ahead
+    def peek(self):
+        if self._buf is _END:
+            raise StopIteration
+        return self._buf
+    def next(self):
+        val = self.peek()
+        self._buf = next(self._it, _END)
+        return val
+    def has_next(self):
+        return self._buf is not _END
+    def __iter__(self):
+        return self
+    def __next__(self):
+        return self.next()
+
+p = PeekingIterator("abc")
+print(p.peek(), p.next(), p.peek(), list(p))
+```
+:::explain
+The trick is a **one-item look-ahead buffer**: we always pre-fetch the next element, so `peek` is just "return the buffer" and `has_next` is "is the buffer the end marker?". A unique `object()` sentinel distinguishes "no more items" from a legitimate `None`. Implementing `__iter__` (returning self) and `__next__` makes it work in `for` loops and with `list()`.
+:::complexity
+O(1) per operation.
+:::end
+
+:::program medium | Flatten nested list iterator | LeetCode 341 | https://leetcode.com/problems/flatten-nested-list-iterator/
+Write a generator `flatten(nested)` that yields the integers of an arbitrarily nested list **lazily**, left to right. Then wrap it in a `NestedIterator` class with `next()` and `has_next()` as on LeetCode (there the input uses `NestedInteger` objects; here we use plain lists and ints).
+:::starter
+```python norun
+def flatten(nested):
+    pass
+
+class NestedIterator:
+    def __init__(self, nested):
+        pass
+    def next(self):
+        pass
+    def has_next(self):
+        pass
+```
+:::tests
+```python norun
+assert list(flatten([[1, 1], 2, [1, 1]])) == [1, 1, 2, 1, 1]
+assert list(flatten([1, [4, [6]]])) == [1, 4, 6]
+assert list(flatten([[], [[]], 3])) == [3]
+assert list(flatten([])) == []
+deep = [0]
+for i in range(1, 3000): deep = [deep, i]
+assert list(flatten(deep))[:3] == [0, 1, 2]
+it = NestedIterator([[1, [2]], [], 3])
+out = []
+while it.has_next(): out.append(it.next())
+assert out == [1, 2, 3]
+```
+:::hint
+To survive nesting 3000 levels deep (more than the recursion limit), use an explicit **stack of iterators**, not recursion.
+:::solution
+```python
+def flatten(nested):
+    stack = [iter(nested)]
+    while stack:
+        for x in stack[-1]:
+            if isinstance(x, list):
+                stack.append(iter(x))      # descend: pause the current list
+                break
+            yield x
+        else:
+            stack.pop()                    # current list exhausted
+
+_END = object()
+
+class NestedIterator:
+    def __init__(self, nested):
+        self._gen = flatten(nested)
+        self._buf = next(self._gen, _END)
+    def next(self):
+        val, self._buf = self._buf, next(self._gen, _END)
+        return val
+    def has_next(self):
+        return self._buf is not _END
+
+print(list(flatten([1, [4, [6, [], [7]]], 8])))
+```
+:::explain
+The stack holds **paused iterators**, one per nesting level. Meeting a sublist pushes a new iterator and `break`s out of the current `for`, so the outer list's position is remembered by its iterator. `for … else` pops a list only when it's exhausted. Laziness means the iterator does constant work per element. The class reuses the one-item look-ahead from the Peeking Iterator.
+:::complexity
+O(total elements + lists) time. O(nesting depth) memory.
+:::end
+
+:::program hard | Infinite primes generator | Real-world task
+Write an **infinite** generator `primes()` yielding 2, 3, 5, 7, 11, … forever, using an **incremental sieve**: keep a dict mapping each upcoming composite number to the primes that divide it. The 10,000th prime must be found in well under a second.
+:::starter
+```python norun
+def primes():
+    pass
+```
+:::tests
+```python norun
+import itertools
+assert list(itertools.islice(primes(), 10)) == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+assert next(itertools.islice(primes(), 9999, None)) == 104729
+assert sum(itertools.takewhile(lambda p: p < 100, primes())) == 1060
+g1, g2 = primes(), primes()
+assert next(g1) == 2 and next(g1) == 3 and next(g2) == 2
+```
+:::hint
+For each candidate `n`: if `n` isn't in the dict, it's prime. Yield it and schedule `n*n` as its first composite. If it is in the dict, move each of its prime "witnesses" `p` forward to the next multiple `n + p` and delete `n`.
+:::solution
+```python
+import itertools
+
+def primes():
+    composites = {}                 # next composite -> list of primes that divide it
+    for n in itertools.count(2):
+        if n not in composites:
+            yield n                 # n is prime
+            composites[n * n] = [n] # first composite we need to rule out for n
+        else:
+            for p in composites.pop(n):
+                composites.setdefault(n + p, []).append(p)   # slide each witness forward
+
+print(list(itertools.islice(primes(), 15)))
+print(next(itertools.islice(primes(), 9999, None)))
+```
+:::explain
+The classic Sieve of Eratosthenes needs an upper bound decided in advance. This **incremental** version (from Melissa O'Neill's paper) is lazy: each prime `p` "walks" along its multiples, and the dict only stores the next multiple per prime, so memory stays proportional to the primes found so far. Starting at `p*p` is safe because smaller multiples of `p` have a smaller prime factor that already crossed them off. Each generator object keeps its own dict, so independent generators don't interfere.
+:::trace
+| n | in dict? | action | dict after |
+|---|---|---|---|
+| 2 | no | yield 2 | {4: [2]} |
+| 3 | no | yield 3 | {4: [2], 9: [3]} |
+| 4 | yes [2] | move 2 → 6 | {9: [3], 6: [2]} |
+| 5 | no | yield 5 | {…, 25: [5]} |
+| 6 | yes [2] | move 2 → 8 | {9: [3], 25: [5], 8: [2]} |
+:::complexity
+About O(n log log n) for the first n numbers, and O(π(n)) memory.
 :::end

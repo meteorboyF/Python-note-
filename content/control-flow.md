@@ -269,6 +269,45 @@ Step through that block with the visualiser to *see* the skip.
 | 9 | Deep nesting | guard clauses, early `return`/`continue` |
 | 10 | Floating-point loop counters (`while x != 1.0: x += 0.1`) | use ints, or `<`/`math.isclose` |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+for n in range(2, 5):
+    if n % 5 == 0:
+        break
+else:
+    print("no break")
+print(n)
+```
+What prints?
+- [x] `no break` then `4`
+- [ ] Only `4`
+- [ ] `no break` then `5`
+The loop never hits `break`, so the `else` runs. The loop variable keeps its **last** value, `4` (range stops before 5).
+:::
+
+:::quiz
+```python norun
+def label(x):
+    match x:
+        case [a, b]:
+            return f"pair {a},{b}"
+        case [a, *rest]:
+            return f"starts {a}, {len(rest)} more"
+        case _:
+            return "other"
+print(label([1, 2]), "|", label((7, 8, 9)), "|", label("hi"))
+```
+What prints?
+- [ ] `pair 1,2 | other | other`
+- [x] `pair 1,2 | starts 7, 2 more | other`
+- [ ] `pair 1,2 | starts 7, 2 more | starts h, 1 more`
+Sequence patterns match lists **and tuples**, so `(7, 8, 9)` hits the star pattern. They deliberately do **not** match strings, so `"hi"` falls through to `_`. That's a classic match-case surprise.
+:::
+
 ## Practice problems
 
 :::problem basic | FizzBuzz, then FizzBuzz without if-chains | if/elif, modulo
@@ -561,4 +600,192 @@ for line in vend([("select", "soda"), ("coin", 25), ("coin", 25), ("select", "so
 ```
 :::explain
 Matching on a **tuple of (state, event)** is a clean way to write state machines: each `case` is a transition. Guards (`if item in PRICES`) express preconditions. The final catch-all `case (s, e)` captures and logs anything invalid, so no event is silently lost. This pattern scales to parsers, protocol handlers and game logic.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Fizz Buzz | LeetCode 412 | https://leetcode.com/problems/fizz-buzz/
+Return a list of strings for 1..n: `"FizzBuzz"` for multiples of 15, `"Fizz"` for multiples of 3, `"Buzz"` for multiples of 5, otherwise the number as a string.
+:::starter
+```python norun
+def fizz_buzz(n):
+    pass
+```
+:::tests
+```python norun
+assert fizz_buzz(3) == ["1", "2", "Fizz"]
+assert fizz_buzz(5) == ["1", "2", "Fizz", "4", "Buzz"]
+assert fizz_buzz(15)[-1] == "FizzBuzz"
+assert fizz_buzz(1) == ["1"]
+assert len(fizz_buzz(100)) == 100 and fizz_buzz(100).count("FizzBuzz") == 6
+```
+:::solution
+```python
+def fizz_buzz(n):
+    out = []
+    for i in range(1, n + 1):
+        word = ("Fizz" if i % 3 == 0 else "") + ("Buzz" if i % 5 == 0 else "")
+        out.append(word or str(i))
+    return out
+
+print(fizz_buzz(15))
+```
+:::explain
+Building the word from parts avoids the classic ordering bug (checking `% 3` before `% 15`): a multiple of 15 collects both "Fizz" and "Buzz". `word or str(i)` uses `or` returning its first truthy operand, so an empty string falls back to the number.
+:::complexity
+O(n).
+:::end
+
+:::program basic | Steps to reduce a number to zero | LeetCode 1342 | https://leetcode.com/problems/number-of-steps-to-reduce-a-number-to-zero/
+Count the steps to reach 0 if, at each step, an even number is halved and an odd number has 1 subtracted. `14 → 7 → 6 → 3 → 2 → 1 → 0` is 6 steps.
+:::starter
+```python norun
+def number_of_steps(num):
+    pass
+```
+:::tests
+```python norun
+assert number_of_steps(14) == 6
+assert number_of_steps(8) == 4
+assert number_of_steps(123) == 12
+assert number_of_steps(0) == 0
+assert number_of_steps(1) == 1
+```
+:::solution
+```python
+def number_of_steps(num):
+    steps = 0
+    while num:
+        num = num // 2 if num % 2 == 0 else num - 1
+        steps += 1
+    return steps
+
+def number_of_steps_bits(num):            # every 1-bit costs a subtract, every bit a shift
+    return max(0, num.bit_length() + num.bit_count() - 1)
+
+print(number_of_steps(14), number_of_steps_bits(14), number_of_steps(123), number_of_steps_bits(123))
+```
+:::explain
+A `while` loop fits because we don't know the number of iterations in advance. The bonus one-liner reads the answer from the binary form: each shift (halving) consumes a bit, and each 1-bit needs an extra subtraction. That's `bit_length + bit_count − 1`, a nice link between control flow and bit manipulation.
+:::trace
+| num | rule | steps |
+|---|---|---|
+| 14 | even → 7 | 1 |
+| 7 | odd → 6 | 2 |
+| 6 | even → 3 | 3 |
+| 3 | odd → 2 | 4 |
+| 2 | even → 1 | 5 |
+| 1 | odd → 0 | **6** |
+:::complexity
+O(log n).
+:::end
+
+:::program medium | Spiral matrix II | LeetCode 59 | https://leetcode.com/problems/spiral-matrix-ii/
+Generate an `n × n` matrix filled with 1..n² in clockwise spiral order.
+
+```text
+n = 3  ->  [[1, 2, 3],
+            [8, 9, 4],
+            [7, 6, 5]]
+```
+:::starter
+```python norun
+def generate_matrix(n):
+    pass
+```
+:::tests
+```python norun
+assert generate_matrix(1) == [[1]]
+assert generate_matrix(2) == [[1, 2], [4, 3]]
+assert generate_matrix(3) == [[1, 2, 3], [8, 9, 4], [7, 6, 5]]
+assert generate_matrix(4) == [[1, 2, 3, 4], [12, 13, 14, 5], [11, 16, 15, 6], [10, 9, 8, 7]]
+```
+:::hint
+Walk with a direction vector `(dr, dc)` cycling right → down → left → up. Turn when the next cell is outside the grid or already filled.
+:::solution
+```python
+def generate_matrix(n):
+    grid = [[0] * n for _ in range(n)]
+    dirs = [(0, 1), (1, 0), (0, -1), (-1, 0)]       # right, down, left, up
+    r = c = d = 0
+    for k in range(1, n * n + 1):
+        grid[r][c] = k
+        dr, dc = dirs[d]
+        nr, nc = r + dr, c + dc
+        if not (0 <= nr < n and 0 <= nc < n) or grid[nr][nc]:
+            d = (d + 1) % 4                           # turn clockwise
+            dr, dc = dirs[d]
+            nr, nc = r + dr, c + dc
+        r, c = nr, nc
+    return grid
+
+for row in generate_matrix(4):
+    print(row)
+```
+:::explain
+Instead of four boundary variables, this version uses a **direction table** and the rule "turn right when blocked". `(d + 1) % 4` cycles through the directions, the modulo wrap-around from the Operators chapter. A filled cell (non-zero) counts as blocked, so the spiral naturally tightens inward. Note `[[0] * n for _ in range(n)]` (not `[[0] * n] * n`) to avoid aliased rows.
+:::complexity
+O(n²) time and space.
+:::end
+
+:::program hard | Valid number | LeetCode 65 | https://leetcode.com/problems/valid-number/
+Decide whether a string is a valid number: an optional sign, then digits with an optional decimal point (at least one digit overall), then an optional exponent (`e`/`E`, an optional sign, at least one digit). **No `float()`, no regex.**
+
+```text
+valid:   "2", "0089", "-0.1", "+3.14", "4.", "-.9", "2e10", "-90E3", "3e+7", "53.5e93"
+invalid: "abc", "1a", "1e", "e3", "99e2.5", "--6", "-+3", "95a54e53", ".", ""
+```
+:::starter
+```python norun
+def is_number(s):
+    pass
+```
+:::tests
+```python norun
+assert all(is_number(s) for s in ["2", "0089", "-0.1", "+3.14", "4.", "-.9", "2e10", "-90E3", "3e+7", "+6e-1", "53.5e93", "-123.456e789"])
+assert not any(is_number(s) for s in ["abc", "1a", "1e", "e3", "99e2.5", "--6", "-+3", "95a54e53", ".", "", "+", "1e+", ".e1", "4e+-5"])
+```
+:::hint
+Scan once with flags: `seen_digit`, `seen_dot`, `seen_exp`. A sign is only allowed at index 0 or right after `e`. A dot is only allowed before any dot or exponent. After `e`, reset `seen_digit` so the exponent needs digits of its own.
+:::solution
+```python
+def is_number(s):
+    seen_digit = seen_dot = seen_exp = False
+    for i, ch in enumerate(s):
+        if ch.isdigit():
+            seen_digit = True
+        elif ch in "+-":
+            if i > 0 and s[i - 1] not in "eE":
+                return False
+        elif ch == ".":
+            if seen_dot or seen_exp:
+                return False
+            seen_dot = True
+        elif ch in "eE":
+            if seen_exp or not seen_digit:
+                return False
+            seen_exp = True
+            seen_digit = False          # the exponent needs its own digits
+        else:
+            return False
+    return seen_digit
+
+for s in ["-0.1", "4.", "-.9", "1e", "e3", "99e2.5", "3e+7", "."]:
+    print(repr(s), is_number(s))
+```
+:::explain
+This is a hand-written **finite-state machine** compressed into three flags: each character is accepted or rejected based on what has been seen so far. The trickiest rule is resetting `seen_digit` after `e`, which rejects `"1e"` and `"1e+"` while accepting `"2e10"`. Returning `seen_digit` at the end rejects `"."`, `""` and `"+"`. Writing parsers as explicit state machines is a classic interview skill (LeetCode rates this one Hard).
+:::trace
+`"-.9e2"`:
+| ch | rule | digit | dot | exp |
+|---|---|---|---|---|
+| - | sign at index 0 ok | F | F | F |
+| . | first dot | F | T | F |
+| 9 | digit | T | T | F |
+| e | exp after digit | F | T | T |
+| 2 | digit | T | T | T → **valid** |
+:::complexity
+O(n) time, O(1) space.
 :::end

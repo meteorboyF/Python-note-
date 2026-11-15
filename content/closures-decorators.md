@@ -305,6 +305,45 @@ print(REGISTRY)
 | 9 | Decorator order mistakes | `A(B(f))` |
 | 10 | Heavy work at decoration time slows imports | do work in the wrapper, lazily |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+def deco(fn):
+    print("decorating", fn.__name__)
+    def wrapper():
+        print("before")
+        return fn()
+    return wrapper
+
+@deco
+def hello():
+    return "hi"
+
+print("defined")
+print(hello())
+```
+In what order do the lines print?
+- [ ] `defined`, `decorating hello`, `before`, `hi`
+- [x] `decorating hello`, `defined`, `before`, `hi`
+- [ ] `defined`, `before`, `decorating hello`, `hi`
+Decoration happens **once, at definition time**, before `print("defined")`. The wrapper body runs only when `hello()` is called.
+:::
+
+:::quiz
+```python norun
+fns = [lambda: i * 10 for i in range(3)]
+print([f() for f in fns])
+```
+What prints?
+- [ ] `[0, 10, 20]`
+- [x] `[20, 20, 20]`
+- [ ] `[0, 0, 0]`
+**Late binding**: each lambda looks up `i` when it's called, and by then the comprehension has finished with `i == 2`. Fix it with `lambda i=i: i * 10`.
+:::
+
 ## Practice problems
 
 :::problem basic | Make an adder factory | closures
@@ -589,4 +628,245 @@ print(send_welcome("direct call still works"))
 ```
 :::explain
 `bus.on("signup")` returns a decorator that **closes over** `event` and `once`. The decorator stores the function and returns it unchanged, so the function still works normally (this is how Flask's `@app.route` and pytest's fixtures register things). Rebuilding the list during `emit` drops the `once` handlers safely, without mutating the list while iterating over it.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Compose functions | Real-world task
+Write `compose(*fns)` that returns a function applying the functions **right to left**: `compose(f, g, h)(x) == f(g(h(x)))`. With no functions it returns the identity.
+:::starter
+```python norun
+def compose(*fns):
+    pass
+```
+:::tests
+```python norun
+inc = lambda x: x + 1
+dbl = lambda x: x * 2
+assert compose(inc, dbl)(5) == 11
+assert compose(dbl, inc)(5) == 12
+assert compose()(42) == 42
+assert compose(str, abs, int)("-7") == "7"
+assert compose(inc)(0) == 1
+```
+:::solution
+```python
+from functools import reduce
+
+def compose(*fns):
+    def composed(x):
+        for f in reversed(fns):          # right to left
+            x = f(x)
+        return x
+    return composed
+
+def compose_reduce(*fns):
+    return reduce(lambda f, g: lambda x: f(g(x)), fns, lambda x: x)
+
+inc, dbl = (lambda x: x + 1), (lambda x: x * 2)
+print(compose(inc, dbl)(5), compose_reduce(inc, dbl)(5), compose(str, abs, int)("-7"))
+```
+:::explain
+`composed` is a **closure**: it remembers the `fns` tuple from the call that created it. The `reduce` version folds pairs of functions into new closures, which is elegant functional style. Composition is how pipelines (data cleaning steps, middleware) are built from small reusable functions.
+:::complexity
+O(k) calls per invocation for k functions.
+:::end
+
+:::program medium | Call once | Real-world task
+Write a decorator `@once` so the wrapped function runs **only on its first call**. Later calls return the first result without running the body again. Preserve the function's `__name__`, and expose `.calls` counting how many times the wrapper was called.
+:::starter
+```python norun
+import functools
+
+def once(fn):
+    pass
+```
+:::tests
+```python norun
+runs = []
+@once
+def init(x): runs.append(x); return x * 2
+assert init(5) == 10
+assert init(99) == 10
+assert runs == [5]
+assert init.calls == 2
+assert init.__name__ == "init"
+@once
+def nothing(): return None
+assert nothing() is None and nothing() is None and nothing.calls == 2
+```
+:::hint
+Store "has it run?" separately from the result. Checking `if result is None` breaks for functions that legitimately return `None` (see the last test).
+:::solution
+```python
+import functools
+
+def once(fn):
+    done = False
+    result = None
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        nonlocal done, result
+        wrapper.calls += 1
+        if not done:
+            result = fn(*args, **kwargs)
+            done = True
+        return result
+    wrapper.calls = 0
+    return wrapper
+
+@once
+def connect(url):
+    print("connecting to", url)
+    return f"conn({url})"
+
+print(connect("db://a"), connect("db://b"), connect.calls)
+```
+:::explain
+`done` and `result` live in the decorator's closure, so each decorated function gets its own private state, and `nonlocal` lets the wrapper update it. A separate `done` flag (instead of testing the result) handles functions that return `None`. Attributes on the wrapper function (`wrapper.calls`) are a handy way to expose stats, since functions are objects too.
+:::complexity
+O(1) per call after the first.
+:::end
+
+:::program medium | Memoize with statistics | Real-world task
+Write a decorator `@memoize` that caches results by positional **and** keyword arguments, and exposes `.hits`, `.misses` and `.cache_clear()`. Calls with unhashable arguments (like lists) must still work, just without caching.
+:::starter
+```python norun
+import functools
+
+def memoize(fn):
+    pass
+```
+:::tests
+```python norun
+@memoize
+def fib(n): return n if n < 2 else fib(n - 1) + fib(n - 2)
+assert fib(30) == 832040
+assert fib.misses == 31 and fib.hits == 28
+@memoize
+def power(b, e=2): return b ** e
+assert power(3) == 9 and power(3) == 9 and power.hits == 1
+assert power(b=3, e=3) == 27 and power(e=3, b=3) == 27 and power.hits == 2
+assert power([2][0]) == 4
+@memoize
+def total(xs): return sum(xs)
+assert total([1, 2]) == 3 and total([1, 2]) == 3 and total.hits == 0
+fib.cache_clear(); assert fib.hits == 0 and fib.misses == 0
+```
+:::hint
+Build the key as `(args, frozenset(kwargs.items()))`. Computing `hash(key)` raises `TypeError` for lists, so catch that and just call the function.
+:::solution
+```python
+import functools
+
+def memoize(fn):
+    cache = {}
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        key = (args, frozenset(kwargs.items()))
+        try:
+            hash(key)
+        except TypeError:                     # unhashable argument: don't cache
+            return fn(*args, **kwargs)
+        if key in cache:
+            wrapper.hits += 1
+            return cache[key]
+        wrapper.misses += 1
+        cache[key] = result = fn(*args, **kwargs)
+        return result
+    def cache_clear():
+        cache.clear()
+        wrapper.hits = wrapper.misses = 0
+    wrapper.hits = wrapper.misses = 0
+    wrapper.cache_clear = cache_clear
+    return wrapper
+
+@memoize
+def fib(n):
+    return n if n < 2 else fib(n - 1) + fib(n - 2)
+
+print(fib(30), fib.hits, fib.misses)
+```
+:::explain
+`frozenset(kwargs.items())` makes `power(e=3, b=3)` and `power(b=3, e=3)` produce the same key, because keyword **order** doesn't matter. (But `power(3, e=3)` is a different key: the same argument passed positionally vs by keyword.) Each distinct `n` from 0 to 30 is computed once (31 misses), and every other request is a cache hit (28). Without memoisation, `fib(30)` makes over 2.6 million calls. Likewise, `power(3)` and `power(3, e=2)` get *different* keys even though they compute the same thing. `functools.lru_cache` has exactly the same quirk.
+:::complexity
+O(1) average per cached call. Memory grows with the number of distinct keys.
+:::end
+
+:::program hard | LRU cache decorator from scratch | Real-world task
+Implement `lru_cache(maxsize)`, a decorator **factory** caching positional-argument calls, evicting the **least recently used** entry when full. Expose `.cache_info()` returning a tuple `(hits, misses, maxsize, currsize)`. Don't use `functools.lru_cache`. Use `collections.OrderedDict`.
+:::starter
+```python norun
+import functools
+from collections import OrderedDict
+
+def lru_cache(maxsize=128):
+    pass
+```
+:::tests
+```python norun
+calls = []
+@lru_cache(maxsize=2)
+def sq(x): calls.append(x); return x * x
+assert [sq(2), sq(3), sq(2)] == [4, 9, 4]
+assert calls == [2, 3]
+assert sq(4) == 16
+assert sq(3) == 9 and calls == [2, 3, 4, 3]
+assert sq.cache_info() == (1, 4, 2, 2)
+@lru_cache(maxsize=100)
+def f(n): return n if n < 2 else f(n - 1) + f(n - 2)
+assert f(80) == 23416728348467685
+assert sq.__name__ == "sq"
+```
+:::hint
+On a hit, call `move_to_end(key)` to mark the entry as recently used. On a miss, insert it, and if `len > maxsize`, call `popitem(last=False)` to drop the oldest.
+:::solution
+```python
+import functools
+from collections import OrderedDict
+
+def lru_cache(maxsize=128):
+    def decorator(fn):
+        cache = OrderedDict()
+        stats = {"hits": 0, "misses": 0}
+        @functools.wraps(fn)
+        def wrapper(*args):
+            if args in cache:
+                stats["hits"] += 1
+                cache.move_to_end(args)          # now the most recently used
+                return cache[args]
+            stats["misses"] += 1
+            result = fn(*args)
+            cache[args] = result
+            if len(cache) > maxsize:
+                cache.popitem(last=False)        # evict the least recently used
+            return result
+        wrapper.cache_info = lambda: (stats["hits"], stats["misses"], maxsize, len(cache))
+        return wrapper
+    return decorator
+
+@lru_cache(maxsize=2)
+def square(x):
+    print("  computing", x)
+    return x * x
+
+for x in [2, 3, 2, 4, 3]:
+    print(x, "->", square(x))
+print(square.cache_info())
+```
+:::explain
+There are three layers: `lru_cache(maxsize)` captures the configuration, `decorator(fn)` captures the function, and `wrapper(*args)` runs on every call. `OrderedDict` remembers insertion order and supports O(1) `move_to_end`/`popitem(last=False)`, so it doubles as the recency list. Tracing the tests: after `2, 3, 2` the order is `[3, 2]`. Calling `4` evicts `3` (the least recent), so calling `3` again is a miss.
+:::trace
+`maxsize=2`, calls 2, 3, 2, 4, 3:
+| call | hit? | cache order (LRU → MRU) |
+|---|---|---|
+| 2 | miss | [2] |
+| 3 | miss | [2, 3] |
+| 2 | hit | [3, 2] |
+| 4 | miss, evict 3 | [2, 4] |
+| 3 | miss, evict 2 | [4, 3] |
+:::complexity
+O(1) per call (amortised), O(maxsize) memory.
 :::end

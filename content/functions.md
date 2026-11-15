@@ -299,6 +299,52 @@ Type hints are **not enforced** at run time. Tools like `mypy`, `pyright` and yo
 | 9 | Shadowing built-ins as parameter names (`list`, `id`, `input`) | rename |
 | 10 | Too many positional bool flags | keyword-only parameters |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+def add(item, bag=[]):
+    bag.append(item)
+    return len(bag)
+print(add("a"), add("b"), add("c", []), add("d"))
+```
+What prints?
+- [ ] `1 1 1 1`
+- [x] `1 2 1 3`
+- [ ] `1 2 1 1`
+The default list is created **once** at `def` time and shared by every call that doesn't pass its own. `add("c", [])` uses a fresh list, so it doesn't disturb the shared one, and `add("d")` makes it 3 items long.
+:::
+
+:::quiz
+```python norun
+x = 10
+def f():
+    print(x)
+    x = 5
+f()
+```
+What happens?
+- [ ] Prints `10`
+- [ ] Prints `5`
+- [x] `UnboundLocalError`
+Because `x` is assigned **somewhere** in `f`, Python treats it as local for the **whole** function, decided at compile time. The `print(x)` then reads a local that hasn't been assigned yet.
+:::
+
+:::quiz
+```python norun
+def f(a, b=2, *args, c, **kw):
+    return a, b, args, c, kw
+print(f(1, 3, 4, 5, c=6, d=7))
+```
+What prints?
+- [x] `(1, 3, (4, 5), 6, {'d': 7})`
+- [ ] `(1, 2, (3, 4, 5), 6, {'d': 7})`
+- [ ] `TypeError`
+Positionals fill `a` and `b` first (so the default 2 is overridden by 3), extra positionals go into the `args` **tuple**, `c` is keyword-only (it comes after `*args`), and unknown keywords land in the `kw` **dict**.
+:::
+
 ## Practice problems
 
 :::problem basic | Multiple returns: min, max, mean | tuples, unpacking
@@ -569,4 +615,170 @@ except TypeError as e:
 ```
 :::explain
 `sig.bind` performs the exact argument-to-parameter matching that Python itself does, including defaults, keywords and `*args`. It raises `TypeError` for a missing or extra argument, for free. We then compare each bound value with its annotation. This is the core idea behind run-time validators like `typeguard` and `pydantic`'s `validate_call`. Turning it into a decorator is an exercise for the next chapter.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Running sum of 1d array | LeetCode 1480 | https://leetcode.com/problems/running-sum-of-1d-array/
+Return the running sum: `out[i] = nums[0] + … + nums[i]`. Write it with a loop, then add an optional keyword-only parameter `start=0` that's added to every element of the result.
+:::starter
+```python norun
+def running_sum(nums, *, start=0):
+    pass
+```
+:::tests
+```python norun
+assert running_sum([1, 2, 3, 4]) == [1, 3, 6, 10]
+assert running_sum([1, 1, 1, 1, 1]) == [1, 2, 3, 4, 5]
+assert running_sum([3, 1, 2, 10, 1]) == [3, 4, 6, 16, 17]
+assert running_sum([]) == []
+assert running_sum([1, 2], start=10) == [11, 13]
+```
+:::solution
+```python
+def running_sum(nums, *, start=0):
+    out, total = [], start
+    for x in nums:
+        total += x
+        out.append(total)
+    return out
+
+from itertools import accumulate
+print(running_sum([1, 2, 3, 4]), list(accumulate([1, 2, 3, 4])), running_sum([1, 2], start=10))
+```
+:::explain
+The function returns a **new** list and never mutates its input, so it's a pure function and easy to test. The `*` in the signature makes `start` keyword-only, so callers must write `start=10` and the meaning is obvious at the call site. `itertools.accumulate` is the built-in equivalent.
+:::complexity
+O(n).
+:::end
+
+:::program medium | Pow(x, n) | LeetCode 50 | https://leetcode.com/problems/powx-n/
+Implement `my_pow(x, n)` = xⁿ for any integer `n` (including negative), in **O(log n)** multiplications, without using `**` or `pow`.
+:::starter
+```python norun
+def my_pow(x, n):
+    pass
+```
+:::tests
+```python norun
+assert abs(my_pow(2.0, 10) - 1024.0) < 1e-9
+assert abs(my_pow(2.1, 3) - 9.261) < 1e-9
+assert abs(my_pow(2.0, -2) - 0.25) < 1e-12
+assert my_pow(5, 0) == 1
+assert abs(my_pow(1.0000001, 2**30) / 1.0000001 ** (2**30) - 1) < 1e-6
+assert abs(my_pow(-2.0, 3) + 8.0) < 1e-12
+```
+:::hint
+xⁿ = (x^(n/2))² when n is even, and x · xⁿ⁻¹ when it's odd. For a negative n, compute (1/x)^(−n). The recursion depth is then only about log₂ n.
+:::solution
+```python
+def my_pow(x, n):
+    if n < 0:
+        return my_pow(1 / x, -n)
+    if n == 0:
+        return 1
+    half = my_pow(x, n // 2)          # ONE recursive call, reused
+    return half * half * (x if n % 2 else 1)
+
+print(my_pow(2.0, 10), my_pow(2.0, -2), my_pow(3, 13))
+```
+:::explain
+**Exponentiation by squaring.** The crucial detail is computing `half` once and squaring it. Writing `my_pow(x, n//2) * my_pow(x, n//2)` would make two calls per level and fall back to O(n). The recursion depth is about log₂(2³⁰) = 30 frames, far below Python's recursion limit. Visualise it to see the frames stack up and unwind.
+:::trace
+`my_pow(3, 5)`:
+| call | half | returns |
+|---|---|---|
+| (3, 5) | my_pow(3, 2) = 9 | 9·9·3 = **243** |
+| (3, 2) | my_pow(3, 1) = 3 | 3·3·1 = 9 |
+| (3, 1) | my_pow(3, 0) = 1 | 1·1·3 = 3 |
+| (3, 0) | — | 1 |
+:::complexity
+O(log n) time, O(log n) stack space.
+:::end
+
+:::program medium | Config builder with defaults | Real-world task
+Write `build_config(base, /, **overrides)` that returns a **new** dict: `base` updated with `overrides`, where:
+- unknown keys raise `KeyError` naming the bad key(s), in sorted order;
+- an override with value `None` means "use the default" (it's ignored);
+- the original `base` is never mutated.
+:::starter
+```python norun
+def build_config(base, /, **overrides):
+    pass
+```
+:::tests
+```python norun
+DEFAULTS = {"lr": 0.01, "epochs": 10, "batch": 32}
+assert build_config(DEFAULTS) == {"lr": 0.01, "epochs": 10, "batch": 32}
+assert build_config(DEFAULTS, epochs=3) == {"lr": 0.01, "epochs": 3, "batch": 32}
+assert build_config(DEFAULTS, lr=None, batch=64) == {"lr": 0.01, "epochs": 10, "batch": 64}
+assert DEFAULTS == {"lr": 0.01, "epochs": 10, "batch": 32}
+assert build_config(DEFAULTS, epochs=1) is not DEFAULTS
+assert raises(KeyError, lambda: build_config(DEFAULTS, epoch=5, drop=1))
+assert "drop" in str(raises(KeyError, build_config, DEFAULTS, epoch=5, drop=1))
+```
+:::solution
+```python
+def build_config(base, /, **overrides):
+    unknown = sorted(set(overrides) - set(base))
+    if unknown:
+        raise KeyError(f"unknown option(s): {unknown}")
+    return {**base, **{k: v for k, v in overrides.items() if v is not None}}
+
+DEFAULTS = {"lr": 0.01, "epochs": 10, "batch": 32}
+print(build_config(DEFAULTS, epochs=3, lr=None))
+try:
+    build_config(DEFAULTS, epoch=5)
+except KeyError as e:
+    print("KeyError:", e)
+```
+:::explain
+`/` makes `base` positional-only, so a caller can even pass an option literally named `base` without a clash. `**overrides` collects the keyword arguments into a dict. Set difference finds the unknown keys in one line. `{**base, **filtered}` builds a fresh dict, so the shared `DEFAULTS` is never mutated, which avoids the aliasing bug from Chapter 1. Filtering `is not None` (not truthiness!) keeps legitimate falsy values like `0`.
+:::complexity
+O(len(base) + len(overrides)).
+:::end
+
+:::program hard | Different ways to add parentheses | LeetCode 241 | https://leetcode.com/problems/different-ways-to-add-parentheses/
+Given an expression of numbers and `+ - *`, return **all** possible results from computing it with every possible grouping, in any order (duplicates included). Example: `"2-1-1"` → `[0, 2]` because `((2-1)-1) = 0` and `(2-(1-1)) = 2`.
+:::starter
+```python norun
+def diff_ways_to_compute(expression):
+    pass
+```
+:::tests
+```python norun
+assert sorted(diff_ways_to_compute("2-1-1")) == [0, 2]
+assert sorted(diff_ways_to_compute("2*3-4*5")) == [-34, -14, -10, -10, 10]
+assert diff_ways_to_compute("11") == [11]
+assert sorted(diff_ways_to_compute("1+2+3")) == [6, 6]
+```
+:::hint
+Every operator can be the **last** one evaluated. Split there, recursively get all results for the left and right sides, and combine every pair. Memoise on the substring.
+:::solution
+```python
+from functools import cache
+import operator
+
+OPS = {"+": operator.add, "-": operator.sub, "*": operator.mul}
+
+def diff_ways_to_compute(expression):
+    @cache
+    def solve(expr):
+        results = []
+        for i, ch in enumerate(expr):
+            if ch in OPS:
+                for a in solve(expr[:i]):
+                    for b in solve(expr[i + 1:]):
+                        results.append(OPS[ch](a, b))
+        return results or [int(expr)]          # no operator -> it's just a number
+    return list(solve(expression))
+
+print(sorted(diff_ways_to_compute("2*3-4*5")))
+```
+:::explain
+**Divide and conquer over the last operator**: the left and right halves are independent subproblems, so we combine their result lists with a nested loop (a Cartesian product). `@cache` on an inner function memoises repeated substrings (like `"4*5"` appearing in several splits). The base case is a substring with no operator, which is a plain number. The dispatch dict `OPS` turns operator symbols into functions, a first-class-function trick from this chapter.
+:::complexity
+The number of results grows like the Catalan numbers (exponential), which is unavoidable because we must return them all.
 :::end

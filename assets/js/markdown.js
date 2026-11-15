@@ -163,13 +163,14 @@
     const pid = `${slug}-w${n}`;
     const get = name => b.sections.find(s => s.name === name);
     const starter = codeOf(get("starter")) || "# write your solution here\n";
-    const tests = codeOf(get("tests")).split("\n").filter(l => l.trim() && !l.trim().startsWith("#"));
-    const idx = PROGRAM_REGISTRY.push({ starter, tests, pid }) - 1;
+    const testsSrc = codeOf(get("tests"));
+    const tests = testsSrc.split("\n").filter(l => l.trim() && !l.trim().startsWith("#"));
+    const idx = PROGRAM_REGISTRY.push({ starter, tests, testsSrc, pid }) - 1;
     const lvlName = { basic: "Basic", easy: "Basic", medium: "Medium", hard: "Hard" }[b.level] || b.level;
     const lvlCls = b.level === "easy" ? "basic" : b.level;
     const src = b.source ? `<span class="src">${b.url ? `<a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.source)} ↗</a>` : esc(b.source)}</span>` : "";
     const rest = b.sections.slice(1).filter(s => s.name !== "starter").map(s => {
-      const label = s.name === "tests" ? `🧪 Test cases (${tests.length})` : SECTIONS[s.name];
+      const label = s.name === "tests" ? `🧪 Test cases (${tests.filter(t => t.startsWith("assert")).length})` : SECTIONS[s.name];
       return `<details data-sec="${s.name}"><summary>${label}</summary><div class="dbody">${md(s.lines.join("\n"))}</div></details>`;
     }).join("");
     return `<article class="program" id="${pid}" data-prog="${idx}">

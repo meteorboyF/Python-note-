@@ -40,16 +40,7 @@ for f in files:
 # ---- write-a-program blocks: the reference solution must pass every test ----
 prog_re = re.compile(r"^:::program([^\n]*)\n(.*?)^:::end", re.S | re.M)
 sec_code = lambda body, name: (re.search(r"^:::" + name + r"\s*\n```[^\n]*\n(.*?)^```", body, re.S | re.M) or [None, None])[1]
-HARNESS = """
-_pn_fail = []
-for _pn_t in _pn_tests:
-    try:
-        exec(_pn_t, globals())
-    except Exception as _pn_e:
-        _pn_fail.append(_pn_t + "  ->  " + type(_pn_e).__name__ + ": " + str(_pn_e))
-if _pn_fail:
-    raise SystemExit("TESTS FAILED:\\n" + "\\n".join(_pn_fail))
-"""
+HARNESS = (root / "tools" / "test_harness.py").read_text() + "\nif _pn_failed:\n    raise SystemExit(\"TESTS FAILED:\\n\" + \"\\n\".join(_pn_failed))\n"
 ptotal = pbad = 0
 for f in files:
     src = f.read_text()
@@ -67,8 +58,7 @@ for f in files:
             except SyntaxError as e:
                 problems.append(f"starter SyntaxError: {e}")
         if not problems:
-            tl = [t for t in tests.splitlines() if t.strip() and not t.strip().startswith("#")]
-            code = sol + "\n_pn_tests = " + repr(tl) + "\n" + HARNESS
+            code = sol + "\n_pn_src = " + repr(tests) + "\n" + HARNESS
             with tempfile.TemporaryDirectory() as d:
                 script = pathlib.Path(d) / "prog.py"
                 script.write_text(code, encoding="utf-8")

@@ -3,18 +3,22 @@
 Header format: :::program level | Title | LeetCode 123 | https://leetcode.com/problems/<slug>/
 Checks that the slug exists and that its problem number matches the label.
 """
-import json, pathlib, re, sys, time, urllib.request
+import json, pathlib, re, subprocess, sys, time
 
 root = pathlib.Path(__file__).resolve().parent.parent
 pat = re.compile(r"^:::program[^|]*\|[^|]*\|\s*([^|]*?)\s*\|\s*(https://leetcode\.com/problems/([\w-]+)/?)\s*$", re.M)
 Q = "query q($s:String!){question(titleSlug:$s){questionFrontendId title difficulty}}"
 
 def lookup(slug):
-    req = urllib.request.Request("https://leetcode.com/graphql",
-        data=json.dumps({"query": Q, "variables": {"s": slug}}).encode(),
-        headers={"Content-Type": "application/json", "Referer": "https://leetcode.com", "User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return json.load(r)["data"]["question"]
+    for _ in range(3):
+        r = subprocess.run(["curl", "-s", "-m", "20", "https://leetcode.com/graphql", "-H", "Content-Type: application/json",
+                            "-H", "Referer: https://leetcode.com", "-d", json.dumps({"query": Q, "variables": {"s": slug}})],
+                           capture_output=True, text=True)
+        try:
+            return json.loads(r.stdout)["data"]["question"]
+        except Exception:
+            time.sleep(2)
+    raise RuntimeError(f"could not reach LeetCode for {slug}")
 
 bad = total = 0
 for f in sorted((root / "content").glob("*.md")):
