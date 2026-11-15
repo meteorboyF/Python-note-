@@ -277,6 +277,54 @@ print(demo_mod.counter)
 | 9 | `random` for security | `secrets` |
 | 10 | Relative paths depend on the CWD | build from `Path(__file__).parent` |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+import json
+data = {1: "one", "t": (1, 2)}
+back = json.loads(json.dumps(data))
+print(back)
+```
+What prints?
+- [ ] `{1: 'one', 't': (1, 2)}`
+- [x] `{'1': 'one', 't': [1, 2]}`
+- [ ] `TypeError: keys must be str`
+JSON object keys are always strings, so the int key `1` becomes `"1"`, and JSON has no tuples, so they come back as lists. A JSON round trip is **not** lossless for Python types.
+:::
+
+:::quiz
+```python norun
+from pathlib import Path
+p = Path("data") / "raw" / "sales.2026.csv"
+print(p.name, p.stem, p.suffix, p.parent.name)
+```
+What prints?
+- [x] `sales.2026.csv sales.2026 .csv raw`
+- [ ] `sales.2026.csv sales .2026.csv raw`
+- [ ] `sales.2026.csv sales.2026 .csv data`
+`suffix` is only the **last** extension (`.csv`), and `stem` is the name without it (`sales.2026`). Use `p.suffixes` for `['.2026', '.csv']`. `parent` is the directory containing the file, `data/raw`, whose `.name` is `raw`.
+:::
+
+:::quiz
+```python norun
+import sys, types
+mod = types.ModuleType("m")
+exec("print('loading')", mod.__dict__)
+sys.modules["m"] = mod
+import m
+import m
+print("done")
+```
+How many times does `loading` print?
+- [x] Once (from the `exec`)
+- [ ] Three times
+- [ ] Twice
+`import` checks the `sys.modules` cache first. The module object is already registered, so neither `import m` runs any code again. That's why a module's top-level code runs only once per process.
+:::
+
 ## Practice problems
 
 :::problem basic | Word count of a file | files, Counter
@@ -554,4 +602,214 @@ print(reloaded.run("world"), reloaded.LOADS)
 ```
 :::explain
 `pkgutil.iter_modules(package.__path__)` lists the modules in a package folder, and `importlib.import_module("pkg.name")` imports by string. That's the basis of plugin systems (pytest plugins, Django apps). The second import returns the **cached** module from `sys.modules`, so the body didn't run again. `importlib.reload` re-executes the file into the same module object. Remember that existing `from mod import x` bindings elsewhere still point at the old objects.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Number of days between two dates | LeetCode 1360 | https://leetcode.com/problems/number-of-days-between-two-dates/
+Given two dates as `"YYYY-MM-DD"` strings, return the absolute number of days between them. Use the `datetime` module (no manual leap-year maths).
+:::starter
+```python norun
+from datetime import date
+
+def days_between_dates(date1, date2):
+    pass
+```
+:::tests
+```python norun
+assert days_between_dates("2019-06-29", "2019-06-30") == 1
+assert days_between_dates("2020-01-15", "2019-12-31") == 15
+assert days_between_dates("2024-02-28", "2024-03-01") == 2
+assert days_between_dates("2023-02-28", "2023-03-01") == 1
+assert days_between_dates("1971-01-01", "2100-12-31") == 47481
+```
+:::solution
+```python
+from datetime import date
+
+def days_between_dates(date1, date2):
+    d1, d2 = date.fromisoformat(date1), date.fromisoformat(date2)
+    return abs((d2 - d1).days)
+
+print(days_between_dates("2024-02-28", "2024-03-01"), days_between_dates("2023-02-28", "2023-03-01"))
+```
+:::explain
+`date.fromisoformat` parses `YYYY-MM-DD`. Subtracting two dates gives a `timedelta`, whose `.days` is the gap. Leap years (2024 has Feb 29, 2023 doesn't) are handled for free. That's the main reason to use the standard library instead of hand-rolled calendar arithmetic.
+:::complexity
+O(1).
+:::end
+
+:::program basic | Day of the week | LeetCode 1185 | https://leetcode.com/problems/day-of-the-week/
+Return the weekday name (`"Sunday"`, `"Monday"`, …) for a given `day, month, year`. Solve it with `datetime`, then **without** it using Zeller's congruence, and check that both agree.
+:::starter
+```python norun
+def day_of_the_week(day, month, year):
+    pass
+```
+:::tests
+```python norun
+assert day_of_the_week(31, 8, 2019) == "Saturday"
+assert day_of_the_week(18, 7, 1999) == "Sunday"
+assert day_of_the_week(15, 8, 1993) == "Sunday"
+assert day_of_the_week(15, 11, 2026) == "Sunday"
+assert day_of_the_week(29, 2, 2024) == "Thursday"
+```
+:::solution
+```python
+from datetime import date
+import random
+
+def day_of_the_week(day, month, year):
+    return date(year, month, day).strftime("%A")
+
+NAMES = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+def zeller(day, month, year):
+    if month < 3:                  # January and February count as months 13, 14 of the previous year
+        month += 12
+        year -= 1
+    k, j = year % 100, year // 100
+    h = (day + 13 * (month + 1) // 5 + k + k // 4 + j // 4 + 5 * j) % 7
+    return NAMES[h]
+
+for _ in range(2000):
+    d = date.fromordinal(random.randint(date(1971, 1, 1).toordinal(), date(2100, 12, 31).toordinal()))
+    assert day_of_the_week(d.day, d.month, d.year) == zeller(d.day, d.month, d.year)
+print(day_of_the_week(15, 11, 2026), "| Zeller agrees on 2000 random dates")
+```
+:::explain
+`strftime("%A")` formats a date as its full weekday name, which is the one-line, reliable answer. Zeller's congruence shows the maths underneath. The random comparison against the library is a great way to test a formula you derived yourself (**property-based testing**). Note the `%A` output depends on the locale, which is English by default.
+:::complexity
+O(1).
+:::end
+
+:::program medium | CSV sales summary | Real-world task
+Write `summarize(csv_text)` that reads CSV text with columns `date,region,amount` using the `csv` module and returns a dict:
+- `"total"`: the sum of all valid amounts, rounded to 2 decimals;
+- `"by_region"`: a dict of region → total, sorted by total, **descending**;
+- `"bad_rows"`: the list of 1-based data-row numbers whose amount couldn't be parsed.
+:::starter
+```python norun
+import csv, io
+
+def summarize(csv_text):
+    pass
+```
+:::tests
+```python norun
+text = """date,region,amount
+2026-11-01,north,100.50
+2026-11-01,south,80
+2026-11-02,north,oops
+2026-11-02,east,300
+2026-11-03,south,19.5
+"""
+r = summarize(text)
+assert r["total"] == 500.0
+assert r["by_region"] == {"east": 300.0, "north": 100.5, "south": 99.5}
+assert list(r["by_region"]) == ["east", "north", "south"]
+assert r["bad_rows"] == [3]
+assert summarize("date,region,amount\n") == {"total": 0, "by_region": {}, "bad_rows": []}
+```
+:::hint
+`csv.DictReader(io.StringIO(text))` yields one dict per row, with keys taken from the header. Remember that CSV values are **strings**. Use `enumerate(reader, 1)` for row numbers.
+:::solution
+```python
+import csv, io
+from collections import defaultdict
+
+def summarize(csv_text):
+    totals = defaultdict(float)
+    bad = []
+    for i, row in enumerate(csv.DictReader(io.StringIO(csv_text)), 1):
+        try:
+            amount = float(row["amount"])
+        except (ValueError, TypeError):
+            bad.append(i)
+            continue
+        totals[row["region"]] += amount
+    by_region = dict(sorted(totals.items(), key=lambda kv: kv[1], reverse=True))
+    return {"total": round(sum(totals.values()), 2), "by_region": by_region, "bad_rows": bad}
+
+print(summarize("date,region,amount\n2026-11-01,north,100.5\n2026-11-02,east,300\n2026-11-02,north,oops\n"))
+```
+:::explain
+`io.StringIO` turns a string into a file-like object, so this exact code works with `open("sales.csv", newline="")` too. `defaultdict(float)` removes the "is this region present yet?" check. Since dicts keep insertion order, building one from the **sorted** items produces a ranked dict. Bad rows are recorded instead of crashing the whole report, which is how real data pipelines behave.
+:::complexity
+O(n log r) for n rows and r regions.
+:::end
+
+:::program hard | Flatten and unflatten JSON | Real-world task
+Write `flatten(obj)` turning nested dicts/lists into a flat dict with dotted keys (`{"a": {"b": [1, 2]}}` → `{"a.b.0": 1, "a.b.1": 2}`), and `unflatten(flat)` that rebuilds the original structure (digit keys become list indices). The round trip must be exact for JSON-like data. Empty containers must survive (store them as values).
+:::starter
+```python norun
+def flatten(obj, prefix=""):
+    pass
+
+def unflatten(flat):
+    pass
+```
+:::tests
+```python norun
+doc = {"user": {"name": "Ada", "tags": ["x", "y"], "address": {"city": "Dhaka"}}, "ok": True, "n": None}
+f = flatten(doc)
+assert f["user.tags.1"] == "y" and f["user.address.city"] == "Dhaka" and f["ok"] is True
+assert unflatten(f) == doc
+assert flatten({"a": [], "b": {}}) == {"a": [], "b": {}}
+assert unflatten(flatten({"a": [], "b": {}})) == {"a": [], "b": {}}
+nested = {"m": [[1, 2], [3, {"k": [4]}]]}
+assert unflatten(flatten(nested)) == nested
+assert flatten({"m": [[1, 2], [3]]}) == {"m.0.0": 1, "m.0.1": 2, "m.1.0": 3}
+```
+:::hint
+`flatten`: recurse into non-empty dicts (by key) and lists (by index), building `prefix + "." + key`. `unflatten`: for each dotted key, walk or create containers. A list is needed when the **next** path part is a digit string. Lists may need padding as indices arrive.
+:::solution
+```python
+def flatten(obj, prefix=""):
+    out = {}
+    if isinstance(obj, dict) and obj:
+        items = obj.items()
+    elif isinstance(obj, list) and obj:
+        items = enumerate(obj)
+    else:
+        return {prefix: obj}                 # a leaf (including empty containers)
+    for k, v in items:
+        key = f"{prefix}.{k}" if prefix else str(k)
+        out.update(flatten(v, key))
+    return out
+
+def unflatten(flat):
+    root = {}
+    for dotted, value in flat.items():
+        parts = dotted.split(".")
+        cur = root
+        for i, part in enumerate(parts):
+            last = i == len(parts) - 1
+            nxt = None if last else ([] if parts[i + 1].isdigit() else {})
+            if isinstance(cur, list):
+                idx = int(part)
+                while len(cur) <= idx:
+                    cur.append(None)
+                if last:
+                    cur[idx] = value
+                elif cur[idx] is None:
+                    cur[idx] = nxt
+                cur = cur[idx] if not last else cur
+            else:
+                if last:
+                    cur[part] = value
+                else:
+                    cur = cur.setdefault(part, nxt)
+    return root
+
+doc = {"user": {"name": "Ada", "tags": ["x", "y"]}, "scores": [[1, 2], [3]]}
+f = flatten(doc)
+print(f)
+print(unflatten(f) == doc)
+```
+:::explain
+**Flatten** is a recursive walk: containers recurse with a longer prefix, and anything else (including empty `[]`/`{}`) is a leaf. Storing empty containers as values is what makes the round trip lossless. **Unflatten** walks each dotted path, creating containers lazily: it creates a list when the next part is numeric and a dict otherwise, padding lists with `None` until the index exists. This flat format is exactly how config systems (Hydra, env vars), Elasticsearch and `pandas.json_normalize` represent nested data.
+:::complexity
+O(total size of the data) for both directions.
 :::end

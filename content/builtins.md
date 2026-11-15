@@ -196,6 +196,34 @@ print(list(map(operator.itemgetter(1), [(1, "a"), (2, "b")])))
 | 9 | `eval` on user input | `ast.literal_eval` / `json` |
 | 10 | `all([])` is True | check emptiness explicitly if needed |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+nums = [3, 1, 2]
+result = nums.sort()
+print(result, nums, sorted("bca"))
+```
+What prints?
+- [ ] `[1, 2, 3] [1, 2, 3] bca`
+- [x] `None [1, 2, 3] ['a', 'b', 'c']`
+- [ ] `None [3, 1, 2] ['a', 'b', 'c']`
+`list.sort()` sorts **in place** and returns `None`. `sorted()` works on any iterable and always returns a new **list**, even for a string.
+:::
+
+:::quiz
+```python norun
+print(max([], default="empty"), min("banana"), sum([[1], [2]], []), any([]), all([]))
+```
+What prints?
+- [x] `empty a [1, 2] False True`
+- [ ] `ValueError`
+- [ ] `empty a [1, 2] False False`
+`default=` avoids the ValueError on an empty input. `min` of a string compares characters. `sum` with a `[]` start concatenates lists (slowly). `all([])` is **vacuously True** while `any([])` is False.
+:::
+
 ## Practice problems
 
 :::problem basic | Top-3 scorers | sorted, key, slicing
@@ -410,4 +438,151 @@ for e in ["2 + 3 * (4 - 1) ** 2", "max(3, -abs(-7), round(2.567, 1))", "10 // 3 
 ```
 :::explain
 `ast.parse(…, mode="eval")` turns the text into a syntax tree **without executing anything**. We then walk it with an **allow-list**: only specific node types and operators are handled, and everything else raises. That's the opposite of a block-list, which attackers always find a way around. The exponent cap stops resource-exhaustion attacks. This is how calculator features in web apps should be built.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Maximum product of three numbers | LeetCode 628 | https://leetcode.com/problems/maximum-product-of-three-numbers/
+Return the maximum product of any three numbers in the list (which may contain negatives). Solve it with `sorted`, then in one pass with `heapq.nlargest`/`nsmallest`.
+:::starter
+```python norun
+def maximum_product(nums):
+    pass
+```
+:::tests
+```python norun
+assert maximum_product([1, 2, 3]) == 6
+assert maximum_product([1, 2, 3, 4]) == 24
+assert maximum_product([-1, -2, -3]) == -6
+assert maximum_product([-10, -10, 5, 2]) == 500
+assert maximum_product([-100, -98, -1, 2, 3, 4]) == 39200
+```
+:::hint
+The answer is either the three largest numbers, or the two smallest (most negative: negative × negative is positive) times the largest.
+:::solution
+```python
+import heapq
+
+def maximum_product(nums):
+    a, b, c = heapq.nlargest(3, nums)
+    x, y = heapq.nsmallest(2, nums)
+    return max(a * b * c, x * y * a)
+
+def maximum_product_sorted(nums):
+    s = sorted(nums)
+    return max(s[-1] * s[-2] * s[-3], s[0] * s[1] * s[-1])
+
+print(maximum_product([-100, -98, -1, 2, 3, 4]), maximum_product_sorted([-10, -10, 5, 2]))
+```
+:::explain
+Only two candidate products can be the maximum, so we don't need every triple (that would be O(n³)). `heapq.nlargest(3, …)` finds the top 3 in O(n) for a fixed k, which beats a full O(n log n) sort. Unpacking `a, b, c = …` names the results directly.
+:::complexity
+O(n) with heapq, O(n log n) with sorting.
+:::end
+
+:::program medium | Sort array by increasing frequency | LeetCode 1636 | https://leetcode.com/problems/sort-array-by-increasing-frequency/
+Sort the numbers by frequency, **ascending**. When frequencies tie, sort those values **descending**: `[2, 3, 1, 3, 2]` → `[1, 3, 3, 2, 2]`.
+:::starter
+```python norun
+def frequency_sort(nums):
+    pass
+```
+:::tests
+```python norun
+assert frequency_sort([1, 1, 2, 2, 2, 3]) == [3, 1, 1, 2, 2, 2]
+assert frequency_sort([2, 3, 1, 3, 2]) == [1, 3, 3, 2, 2]
+assert frequency_sort([-1, 1, -6, 4, 5, -6, 1, 4, 1]) == [5, -1, 4, 4, -6, -6, 1, 1, 1]
+assert frequency_sort([]) == []
+```
+:::solution
+```python
+from collections import Counter
+
+def frequency_sort(nums):
+    freq = Counter(nums)
+    return sorted(nums, key=lambda x: (freq[x], -x))
+
+print(frequency_sort([2, 3, 1, 3, 2]))
+```
+:::explain
+The tuple key `(frequency, -value)` encodes both rules: tuples compare left to right, and negating the value flips the tie-break order to descending. `Counter` builds the frequency table in O(n). This "count, then sort with a tuple key" combo shows up constantly.
+:::complexity
+O(n log n).
+:::end
+
+:::program medium | Reorder data in log files | LeetCode 937 | https://leetcode.com/problems/reorder-data-in-log-files/
+Each log is `"<identifier> <content>"`. **Letter-logs** (content is words) come before **digit-logs**. Letter-logs are sorted by content, then by identifier. Digit-logs keep their original relative order.
+:::starter
+```python norun
+def reorder_log_files(logs):
+    pass
+```
+:::tests
+```python norun
+logs = ["dig1 8 1 5 1", "let1 art can", "dig2 3 6", "let2 own kit dig", "let3 art zero"]
+assert reorder_log_files(logs) == ["let1 art can", "let3 art zero", "let2 own kit dig", "dig1 8 1 5 1", "dig2 3 6"]
+logs2 = ["a1 9 2 3 1", "g1 act car", "zo4 4 7", "ab1 off key dog", "a8 act zoo"]
+assert reorder_log_files(logs2) == ["g1 act car", "a8 act zoo", "ab1 off key dog", "a1 9 2 3 1", "zo4 4 7"]
+assert reorder_log_files(["b1 x y", "a1 x y"]) == ["a1 x y", "b1 x y"]
+```
+:::hint
+Use one `sorted` call with a key that returns `(0, content, identifier)` for letter-logs and `(1,)` for digit-logs. Sorting is **stable**, so the digit-logs keep their order automatically.
+:::solution
+```python
+def reorder_log_files(logs):
+    def key(log):
+        ident, rest = log.split(" ", 1)
+        return (0, rest, ident) if rest[0].isalpha() else (1,)
+    return sorted(logs, key=key)
+
+print(reorder_log_files(["dig1 8 1 5 1", "let1 art can", "dig2 3 6", "let2 own kit dig", "let3 art zero"]))
+```
+:::explain
+`split(" ", 1)` separates the identifier from the rest **once**. The key's first element puts letter-logs (0) before digit-logs (1). Every digit-log gets the identical key `(1,)`, and because Timsort is **stable**, they keep their input order. Stability is what makes this one-call solution correct.
+:::complexity
+O(n·L·log n) for n logs of length L.
+:::end
+
+:::program hard | Largest number | LeetCode 179 | https://leetcode.com/problems/largest-number/
+Arrange non-negative integers to form the **largest** possible number, returned as a string: `[3, 30, 34, 5, 9]` → `"9534330"`. Watch the all-zeros case (`[0, 0]` → `"0"`).
+:::starter
+```python norun
+def largest_number(nums):
+    pass
+```
+:::tests
+```python norun
+assert largest_number([10, 2]) == "210"
+assert largest_number([3, 30, 34, 5, 9]) == "9534330"
+assert largest_number([0, 0]) == "0"
+assert largest_number([1]) == "1"
+assert largest_number([432, 43243]) == "43243432"
+assert largest_number([999999998, 999999997, 999999999]) == "999999999999999998999999997"
+```
+:::hint
+Ordinary string sorting fails (`"3" < "30"`, but `"330" > "303"`). Compare two numbers `a`, `b` by checking which concatenation is bigger: `a + b` vs `b + a`. Use `functools.cmp_to_key`.
+:::solution
+```python
+from functools import cmp_to_key
+
+def largest_number(nums):
+    strs = list(map(str, nums))
+    def compare(a, b):
+        if a + b > b + a:
+            return -1            # a should come first
+        if a + b < b + a:
+            return 1
+        return 0
+    strs.sort(key=cmp_to_key(compare))
+    result = "".join(strs)
+    return "0" if result[0] == "0" else result
+
+print(largest_number([3, 30, 34, 5, 9]), largest_number([0, 0]))
+```
+:::explain
+The right order is defined by a **pairwise rule**, not a per-item key: put `a` before `b` if `ab > ba`. This relation is transitive (a neat exercise to prove), so it's a valid sort order. `cmp_to_key` adapts an old-style comparator (returning negative/zero/positive) into a key function for `sort`. If the largest piece is `"0"`, everything is zero, which explains the special case.
+:::complexity
+O(n log n · L) for n numbers with up to L digits.
 :::end

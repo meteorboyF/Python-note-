@@ -187,6 +187,37 @@ What is `middle` after `first, *middle, last = "ab"`?
 | 9 | Unpacking a dict gives KEYS (`a, b = {"x": 1, "y": 2}`) | `.items()` / `.values()` |
 | 10 | Generator expression consumed twice | materialise if reused |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+grid = [[0] * 2] * 2
+grid[0][0] = 9
+safe = [[0] * 2 for _ in range(2)]
+safe[0][0] = 9
+print(grid, safe)
+```
+What prints?
+- [x] `[[9, 0], [9, 0]] [[9, 0], [0, 0]]`
+- [ ] `[[9, 0], [0, 0]] [[9, 0], [0, 0]]`
+- [ ] `[[9, 0], [9, 0]] [[9, 0], [9, 0]]`
+`[[0] * 2] * 2` repeats a **reference** to one inner list. The comprehension evaluates `[0] * 2` **once per iteration**, creating separate rows.
+:::
+
+:::quiz
+```python norun
+pairs = [(a, b) for a in range(3) for b in range(a)]
+print(pairs)
+```
+What prints?
+- [ ] `[(0, 0), (1, 0), (2, 0), (2, 1)]`
+- [x] `[(1, 0), (2, 0), (2, 1)]`
+- [ ] `NameError: a is not defined`
+The `for` clauses nest left to right, so the inner loop can use `a`. When `a == 0`, `range(0)` is empty and contributes nothing.
+:::
+
 ## Practice problems
 
 :::problem basic | Squares of odd numbers | list comprehension, filter
@@ -346,4 +377,159 @@ print(enc, rle_decode(enc) == s)
 ```
 :::explain
 `groupby` yields **consecutive** runs, which is exactly what RLE needs (unsorted input is correct here!). Decoding uses the regex `(\D)(\d+)`, "one non-digit followed by one or more digits", so multi-digit counts work. The `findall` tuples unpack straight into `ch, n` in the generator expression.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Transpose matrix | LeetCode 867 | https://leetcode.com/problems/transpose-matrix/
+Return the transpose of a (possibly non-square) matrix: rows become columns. Write it as a **nested comprehension**, then as a one-liner with `zip`.
+:::starter
+```python norun
+def transpose(matrix):
+    pass
+```
+:::tests
+```python norun
+assert transpose([[1, 2, 3], [4, 5, 6], [7, 8, 9]]) == [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
+assert transpose([[1, 2, 3], [4, 5, 6]]) == [[1, 4], [2, 5], [3, 6]]
+assert transpose([[5]]) == [[5]]
+assert transpose([[1], [2]]) == [[1, 2]]
+```
+:::solution
+```python
+def transpose(matrix):
+    return [[row[c] for row in matrix] for c in range(len(matrix[0]))]
+
+def transpose_zip(matrix):
+    return [list(col) for col in zip(*matrix)]
+
+m = [[1, 2, 3], [4, 5, 6]]
+print(transpose(m), transpose_zip(m))
+```
+:::explain
+The outer comprehension picks a column index `c`, and the inner one collects that column from every row. `zip(*matrix)` unpacks the rows as separate arguments, and zip groups the first elements, then the second… which are exactly the columns. The result has shape cols × rows.
+:::complexity
+O(rows × cols).
+:::end
+
+:::program basic | Flipping an image | LeetCode 832 | https://leetcode.com/problems/flipping-an-image/
+Given a binary matrix, flip each row horizontally, then invert it (0 → 1, 1 → 0). Return the new matrix in **one comprehension** without modifying the input.
+:::starter
+```python norun
+def flip_and_invert(image):
+    pass
+```
+:::tests
+```python norun
+img = [[1, 1, 0], [1, 0, 1], [0, 0, 0]]
+assert flip_and_invert(img) == [[1, 0, 0], [0, 1, 0], [1, 1, 1]]
+assert img == [[1, 1, 0], [1, 0, 1], [0, 0, 0]]
+assert flip_and_invert([[1, 1, 0, 0], [1, 0, 0, 1], [0, 1, 1, 1], [1, 0, 1, 0]]) == [[1, 1, 0, 0], [0, 1, 1, 0], [0, 0, 0, 1], [1, 0, 1, 0]]
+assert flip_and_invert([[0]]) == [[1]]
+```
+:::solution
+```python
+def flip_and_invert(image):
+    return [[1 - x for x in reversed(row)] for row in image]
+
+print(flip_and_invert([[1, 1, 0], [1, 0, 1], [0, 0, 0]]))
+```
+:::explain
+`reversed(row)` walks the row backwards lazily (no copy), and `1 - x` inverts a bit (`x ^ 1` works too). Because the comprehension builds new lists, the input is untouched, which the second test checks.
+:::complexity
+O(n²).
+:::end
+
+:::program medium | Pascal's triangle | LeetCode 118 | https://leetcode.com/problems/pascals-triangle/
+Return the first `num_rows` rows of Pascal's triangle. Each row is built from the previous one: every inner value is the sum of the two values above it.
+:::starter
+```python norun
+def generate(num_rows):
+    pass
+```
+:::tests
+```python norun
+assert generate(1) == [[1]]
+assert generate(5) == [[1], [1, 1], [1, 2, 1], [1, 3, 3, 1], [1, 4, 6, 4, 1]]
+assert generate(0) == []
+import math
+assert generate(12)[-1] == [math.comb(11, k) for k in range(12)]
+```
+:::hint
+Pad the previous row with 0 on both sides and add the shifted copies element-wise: `[a + b for a, b in zip([0] + row, row + [0])]`.
+:::solution
+```python
+def generate(num_rows):
+    rows = []
+    row = [1]
+    for _ in range(num_rows):
+        rows.append(row)
+        row = [a + b for a, b in zip([0] + row, row + [0])]
+    return rows
+
+for r in generate(6):
+    print(" ".join(map(str, r)).center(30))
+```
+:::explain
+Shifting the row right (`[0] + row`) and left (`row + [0]`) lines up each pair of neighbours, so a single zip-comprehension builds the next row, edges included. The values are binomial coefficients C(n, k), which the last test checks with `math.comb`. Each new row is a fresh list, so `rows` never contains aliased references.
+:::trace
+| row | [0]+row | row+[0] | next row |
+|---|---|---|---|
+| [1] | [0, 1] | [1, 0] | [1, 1] |
+| [1, 1] | [0, 1, 1] | [1, 1, 0] | [1, 2, 1] |
+| [1, 2, 1] | [0, 1, 2, 1] | [1, 2, 1, 0] | [1, 3, 3, 1] |
+:::complexity
+O(n²) time and space.
+:::end
+
+:::program hard | Diagonal traverse | LeetCode 498 | https://leetcode.com/problems/diagonal-traverse/
+Return all elements of an m × n matrix in "zig-zag diagonal" order: up-right along the first diagonal, then down-left along the next, alternating.
+
+```text
+[[1, 2, 3],
+ [4, 5, 6],      ->  [1, 2, 4, 7, 5, 3, 6, 8, 9]
+ [7, 8, 9]]
+```
+:::starter
+```python norun
+def find_diagonal_order(mat):
+    pass
+```
+:::tests
+```python norun
+assert find_diagonal_order([[1, 2, 3], [4, 5, 6], [7, 8, 9]]) == [1, 2, 4, 7, 5, 3, 6, 8, 9]
+assert find_diagonal_order([[1, 2], [3, 4]]) == [1, 2, 3, 4]
+assert find_diagonal_order([[1, 2, 3, 4]]) == [1, 2, 3, 4]
+assert find_diagonal_order([[1], [2], [3]]) == [1, 2, 3]
+assert find_diagonal_order([[1, 2, 3], [4, 5, 6]]) == [1, 2, 4, 5, 3, 6]
+```
+:::hint
+All cells on one anti-diagonal share `r + c = d`. Collect each diagonal top-down (increasing `r`), then reverse every **even** `d` so it reads bottom-up.
+:::solution
+```python
+def find_diagonal_order(mat):
+    m, n = len(mat), len(mat[0])
+    out = []
+    for d in range(m + n - 1):
+        diag = [mat[r][d - r] for r in range(max(0, d - n + 1), min(m, d + 1))]
+        out.extend(diag[::-1] if d % 2 == 0 else diag)
+    return out
+
+print(find_diagonal_order([[1, 2, 3], [4, 5, 6], [7, 8, 9]]))
+```
+:::explain
+Instead of simulating the bouncing walk (lots of edge cases), group cells by their **diagonal index** `d = r + c`. For a fixed `d`, `r` ranges over `max(0, d−n+1) … min(m−1, d)`, so the comprehension only touches valid cells. Even diagonals travel upward, so we reverse them. Turning the geometry into an index formula is a classic simplification trick.
+:::trace
+3×3 example:
+| d | cells top-down | emitted |
+|---|---|---|
+| 0 | [1] | 1 |
+| 1 | [2, 4] | 2, 4 |
+| 2 | [3, 5, 7] | 7, 5, 3 (reversed) |
+| 3 | [6, 8] | 6, 8 |
+| 4 | [9] | 9 |
+:::complexity
+O(m·n).
 :::end

@@ -316,6 +316,57 @@ except ValueError as e:
 | 9 | The `e` name is deleted after the `except` block | copy it if you need it later |
 | 10 | Not closing files on error | `with open(...)` |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+def f():
+    try:
+        return "try"
+    finally:
+        print("cleanup")
+print(f())
+```
+What prints?
+- [ ] `try`
+- [x] `cleanup` then `try`
+- [ ] `try` then `cleanup`
+`finally` runs **before** the function actually returns. The return value is computed first, `finally` prints, and then the caller receives `"try"` and prints it.
+:::
+
+:::quiz
+```python norun
+try:
+    {}["k"]
+except LookupError:
+    print("lookup")
+except KeyError:
+    print("key")
+```
+What prints?
+- [x] `lookup`
+- [ ] `key`
+- [ ] both lines
+`KeyError` is a **subclass** of `LookupError`, so the first matching clause wins and only one handler runs. Put specific exceptions **before** general ones, or the specific handler is unreachable.
+:::
+
+:::quiz
+```python norun
+try:
+    int("x")
+except ValueError as e:
+    msg = str(e)
+print(msg[:7], "e" in dir())
+```
+What prints?
+- [x] `invalid False`
+- [ ] `invalid True`
+- [ ] `NameError`
+Python **deletes** the `as e` name at the end of the `except` block (to avoid reference cycles with the traceback). Copying what you need into another variable (`msg`) keeps it.
+:::
+
 ## Practice problems
 
 :::problem basic | Robust integer input | try/except, loops
@@ -634,4 +685,267 @@ except RuntimeError as e:
 ```
 :::explain
 `raise X from Y` sets `X.__cause__ = Y` (and `__suppress_context__ = True`). Raising inside an `except` block sets `__context__` automatically. Following these links reaches the original failure: here the `KeyError` three levels down. The `seen` set guards against pathological cycles. Error reporters (Sentry, logging frameworks) walk exactly these attributes to print "The above exception was the direct cause of…".
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Safe averages | Real-world task
+Write `safe_average(values)` that averages the items it can convert with `float()`, **skipping** the bad ones (strings like `"abc"`, `None`, empty strings). Return `(average, skipped_count)`, and return `(None, skipped_count)` when nothing was valid.
+:::starter
+```python norun
+def safe_average(values):
+    pass
+```
+:::tests
+```python norun
+assert safe_average([1, "2", 3.0]) == (2.0, 0)
+assert safe_average(["4", "abc", None, "", 8]) == (6.0, 3)
+assert safe_average([]) == (None, 0)
+assert safe_average(["x", None]) == (None, 2)
+assert safe_average([" 5 ", "1e1"]) == (7.5, 0)
+```
+:::hint
+`float(None)` raises `TypeError`, while `float("abc")` raises `ValueError`. Catch both with a tuple.
+:::solution
+```python
+def safe_average(values):
+    total, count, skipped = 0.0, 0, 0
+    for v in values:
+        try:
+            total += float(v)
+        except (ValueError, TypeError):
+            skipped += 1
+        else:                       # only runs when float() succeeded
+            count += 1
+    return (total / count if count else None), skipped
+
+print(safe_average(["4", "abc", None, "", 8]))
+```
+:::explain
+EAFP in action: just try the conversion. Catching **exactly** `ValueError` and `TypeError` (not a bare `except`) means a real bug, like a typo raising `NameError`, still surfaces. The `else` clause keeps the "success" bookkeeping out of the `try` block, so only the risky call is guarded.
+:::complexity
+O(n).
+:::end
+
+:::program medium | Validating config loader | Real-world task
+Write `load_config(text)` that parses `key = value` lines and returns a dict with **int** values. Define a custom exception hierarchy: `ConfigError(Exception)` with subclasses `MissingKeyError` and `BadValueError`. Rules:
+- blank lines and lines starting with `#` are ignored;
+- a malformed line (no `=`) raises `ConfigError` mentioning its line number;
+- a non-integer value raises `BadValueError` mentioning the key, **chained** from the original `ValueError` (`raise … from e`);
+- the keys `host_port` and `workers` are required, otherwise raise `MissingKeyError` listing what's missing.
+:::starter
+```python norun
+class ConfigError(Exception): pass
+class MissingKeyError(ConfigError): pass
+class BadValueError(ConfigError): pass
+
+def load_config(text):
+    pass
+```
+:::tests
+```python norun
+good = """
+# server settings
+host_port = 8080
+workers= 4
+"""
+assert load_config(good) == {"host_port": 8080, "workers": 4}
+assert "workers" in str(raises(MissingKeyError, load_config, "host_port = 1"))
+assert raises(ConfigError, load_config, "host_port = 1")
+assert "line 2" in str(raises(ConfigError, load_config, "host_port = 1\noops\nworkers = 2"))
+assert "workers" in str(raises(BadValueError, load_config, "host_port = 1\nworkers = many"))
+try:
+    load_config("host_port = 1\nworkers = many")
+except BadValueError as e:
+    assert isinstance(e.__cause__, ValueError)
+```
+:::hint
+Use `str.partition("=")` to split a line, and `enumerate(text.splitlines(), 1)` for line numbers. Wrap `int(value)` in `try/except ValueError as e:` and re-raise with `raise BadValueError(...) from e`.
+:::solution
+```python
+class ConfigError(Exception): pass
+class MissingKeyError(ConfigError): pass
+class BadValueError(ConfigError): pass
+
+REQUIRED = {"host_port", "workers"}
+
+def load_config(text):
+    config = {}
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if not sep:
+            raise ConfigError(f"line {lineno}: expected 'key = value', got {raw!r}")
+        key, value = key.strip(), value.strip()
+        try:
+            config[key] = int(value)
+        except ValueError as e:
+            raise BadValueError(f"{key!r} must be an integer, got {value!r}") from e
+    missing = sorted(REQUIRED - config.keys())
+    if missing:
+        raise MissingKeyError(f"missing required keys: {missing}")
+    return config
+
+print(load_config("host_port = 8080\nworkers = 4"))
+try:
+    load_config("host_port = 1\nworkers = many")
+except ConfigError as e:
+    print(type(e).__name__, "-", e, "| caused by:", repr(e.__cause__))
+```
+:::explain
+A small **exception hierarchy** lets callers choose their level: catch `BadValueError` specifically, or any `ConfigError`. `raise … from e` keeps the original `ValueError` as `__cause__`, so debugging shows both the friendly message and the root cause. Line numbers in messages turn a confusing failure into a one-second fix, which is a mark of professional tooling.
+:::complexity
+O(total length of the text).
+:::end
+
+:::program medium | Retry with backoff | Real-world task
+Write `retry(fn, attempts=3, exceptions=(Exception,), delays=None)` that calls `fn()` until it succeeds. On a listed exception, it records the delay it **would** sleep (start at 1, double each time, and append to `delays` if a list is given, instead of sleeping, for testability) and tries again. After the last failed attempt it re-raises the original exception. Exceptions not in `exceptions` propagate immediately.
+:::starter
+```python norun
+def retry(fn, attempts=3, exceptions=(Exception,), delays=None):
+    pass
+```
+:::tests
+```python norun
+calls = {"n": 0}
+def flaky():
+    calls["n"] += 1
+    if calls["n"] < 3:
+        raise ConnectionError("down")
+    return "ok"
+waits = []
+assert retry(flaky, attempts=5, exceptions=(ConnectionError,), delays=waits) == "ok"
+assert calls["n"] == 3 and waits == [1, 2]
+def always_fails(): raise TimeoutError("slow")
+waits2 = []
+assert "slow" in str(raises(TimeoutError, retry, always_fails, 3, (TimeoutError,), waits2))
+assert waits2 == [1, 2]
+def bug(): raise KeyError("oops")
+assert raises(KeyError, retry, bug, 5, (ConnectionError,))
+```
+:::solution
+```python
+def retry(fn, attempts=3, exceptions=(Exception,), delays=None):
+    delay = 1
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except exceptions:
+            if attempt == attempts:
+                raise                      # re-raise the ORIGINAL exception, traceback intact
+            if delays is not None:
+                delays.append(delay)       # a real version would time.sleep(delay)
+            delay *= 2
+
+state = {"n": 0}
+def sometimes():
+    state["n"] += 1
+    if state["n"] < 3:
+        raise ConnectionError("network hiccup")
+    return f"worked on attempt {state['n']}"
+
+waits = []
+print(retry(sometimes, attempts=5, exceptions=(ConnectionError,), delays=waits), waits)
+```
+:::explain
+`except exceptions:` accepts a **tuple** of types, so callers control what counts as "transient". A bare `raise` inside `except` re-raises the current exception with its original traceback. Recording the delays instead of sleeping is **dependency injection** for testability: production code would pass in a sleep function. Exponential backoff (1, 2, 4 …) avoids hammering a struggling service.
+:::complexity
+O(attempts) calls.
+:::end
+
+:::program hard | Transaction with rollback | Real-world task
+Write a context manager class `Transaction(store)` for a dict-based key-value `store`:
+- inside the `with` block, `tx.set(key, value)` and `tx.delete(key)` change the store **immediately**;
+- if the block raises, **every** change is undone, restoring the exact previous state (including keys that didn't exist before), and the exception still propagates;
+- on success the changes are kept, and `tx.committed` is True.
+:::starter
+```python norun
+class Transaction:
+    def __init__(self, store):
+        pass
+    def __enter__(self):
+        pass
+    def __exit__(self, exc_type, exc, tb):
+        pass
+    def set(self, key, value):
+        pass
+    def delete(self, key):
+        pass
+```
+:::tests
+```python norun
+store = {"a": 1, "b": 2}
+with Transaction(store) as tx:
+    tx.set("a", 10); tx.set("c", 3); tx.delete("b")
+assert store == {"a": 10, "c": 3} and tx.committed
+store2 = {"a": 1, "b": 2}
+def failing():
+    with Transaction(store2) as tx:
+        tx.set("a", 99); tx.set("new", 1); tx.delete("b"); tx.set("a", 100)
+        raise RuntimeError("boom")
+assert "boom" in str(raises(RuntimeError, failing))
+assert store2 == {"a": 1, "b": 2}
+store3 = {"x": 1}
+def bad_delete():
+    with Transaction(store3) as tx:
+        tx.set("x", 2); tx.delete("missing")
+assert raises(KeyError, bad_delete) and store3 == {"x": 1}
+```
+:::hint
+Keep an **undo log**: before each change, record `(key, old_value)`, using a private sentinel for "key didn't exist". On failure, replay the log **backwards**.
+:::solution
+```python
+_MISSING = object()
+
+class Transaction:
+    def __init__(self, store):
+        self.store = store
+        self.log = []                         # (key, previous value or _MISSING)
+        self.committed = False
+    def __enter__(self):
+        return self
+    def set(self, key, value):
+        self.log.append((key, self.store.get(key, _MISSING)))
+        self.store[key] = value
+    def delete(self, key):
+        old = self.store[key]                 # raises KeyError if missing (before logging)
+        self.log.append((key, old))
+        del self.store[key]
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None:
+            self.committed = True
+            return False
+        for key, old in reversed(self.log):   # undo in reverse order
+            if old is _MISSING:
+                self.store.pop(key, None)
+            else:
+                self.store[key] = old
+        return False                          # don't swallow the exception
+
+data = {"balance": 100}
+try:
+    with Transaction(data) as tx:
+        tx.set("balance", 40)
+        tx.set("audit", "withdrew 60")
+        raise ValueError("card declined")
+except ValueError as e:
+    print("rolled back:", data, "| reason:", e)
+```
+:::explain
+This is the **undo-log** technique databases use. Each mutation first records how to reverse itself. `__exit__` receives the exception details: on success it marks the commit, and on failure it replays the log in **reverse**, which correctly handles a key changed several times (`a`: 1 → 99 → 100 restores to 1). The `_MISSING` sentinel distinguishes "key didn't exist" from "key held None". Returning `False` lets the original exception keep propagating.
+:::trace
+Failing transaction on `{"a": 1, "b": 2}`:
+| operation | log entry | store after |
+|---|---|---|
+| set a=99 | (a, 1) | a=99, b=2 |
+| set new=1 | (new, MISSING) | a=99, b=2, new=1 |
+| delete b | (b, 2) | a=99, new=1 |
+| set a=100 | (a, 99) | a=100, new=1 |
+| **raise** → undo backwards | a←99, b←2, new removed, a←1 | **a=1, b=2** |
+:::complexity
+O(1) per operation, O(k) rollback for k operations.
 :::end
