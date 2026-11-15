@@ -141,6 +141,8 @@ print("no newline", end="")
 print(" ...continued", flush=True)
 ```
 
+The full story of reading and validating input is in [Input, Output & f-strings](#/t/io-basics).
+
 `input(prompt)` always returns a **string**, so convert it: `n = int(input("n? "))`. For many numbers on one line: `a, b = map(int, input().split())`.
 
 ## 9. `eval`/`exec`: dangerous power

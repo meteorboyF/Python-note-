@@ -11,7 +11,7 @@
   function emitStatus(msg) { statusListeners.forEach(fn => fn(msg)); }
   function getWorker() {
     if (worker) return worker;
-    worker = new Worker("assets/js/tracer-worker.js?v=8", { type: "module" });
+    worker = new Worker("assets/js/tracer-worker.js?v=9", { type: "module" });
     ready = false;
     worker.onmessage = (e) => {
       const m = e.data;

@@ -4,6 +4,7 @@ Each block must be self-contained. Flags after the language:
   norun  - skipped (pseudo-code, fragments)
   error  - must raise an exception
   plot   - matplotlib figure (run headless)
+  in:A;B - sample input typed by the user: lines separated by ';', '+' stands for a space
 Usage: python tools/check.py [slug ...]
 """
 import re, sys, subprocess, pathlib, os, tempfile
@@ -22,13 +23,14 @@ for f in files:
         if "norun" in flags:
             continue
         code = m.group(2)
+        stdin = next((x[3:].replace(";", "\n").replace("+", " ") + "\n" for x in flags if x.startswith("in:")), "")
         line = src[: m.start()].count("\n") + 1
         total += 1
         with tempfile.TemporaryDirectory() as d:
             script = pathlib.Path(d) / "snippet.py"
             script.write_text(code, encoding="utf-8")
             try:
-                r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30, cwd=d, env=env)
+                r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30, cwd=d, env=env, input=stdin)
                 rc, err = r.returncode, r.stderr
             except subprocess.TimeoutExpired:
                 rc, err = 99, "TIMEOUT"
@@ -49,6 +51,8 @@ for f in files:
         line = src[: m.start()].count("\n") + 1
         body = m.group(2)
         sol, tests, starter = sec_code(body, "solution"), sec_code(body, "tests"), sec_code(body, "starter")
+        fl = re.search(r"^:::solution\s*\n```python([^\n]*)", body, re.M)
+        sol_in = next((x[3:].replace(";", "\n").replace("+", " ") + "\n" for x in (fl.group(1).split() if fl else []) if x.startswith("in:")), "")
         problems = []
         if not sol or not tests:
             problems.append("missing :::solution or :::tests code")
@@ -63,7 +67,7 @@ for f in files:
                 script = pathlib.Path(d) / "prog.py"
                 script.write_text(code, encoding="utf-8")
                 try:
-                    r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=60, cwd=d, env=env)
+                    r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=60, cwd=d, env=env, input=sol_in)
                     if r.returncode != 0:
                         problems.append((r.stderr.strip() or r.stdout.strip())[-600:])
                 except subprocess.TimeoutExpired:

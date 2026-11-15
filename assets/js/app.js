@@ -134,7 +134,7 @@
     tocSpy();
   }
   // ---------- code cards: Output · Breakdown · Visualise (precomputed traces) ----------
-  const TRACE_V = "8";
+  const TRACE_V = "9";
   const traceCache = new Map();
   const loadTraces = slug => {
     if (!traceCache.has(slug)) traceCache.set(slug, fetch(`traces/${slug}.json?v=${TRACE_V}`).then(r => (r.ok ? r.json() : {})).catch(() => ({})));
@@ -163,6 +163,7 @@
       const pane = cx.querySelector('[data-pane="viz"]');
       if (!viz) {
         viz = new Viz.Visualiser(pane, { inline: true, stack: true, onResult: (r, code) => refreshCard(card, r, code) });
+        viz.stdin = card._stdin || "";
         cardViz.set(card, viz);
         viz.loadResult(card._code, card._result);
       } else viz.go(viz.i);
@@ -192,7 +193,7 @@
     cards.forEach(card => {
       const r = data[card.dataset.h];
       if (!r) { card.classList.remove("traced"); return; }   // keep live ▶ Run / 👣 Visualise
-      card._result = r; card._code = CODE_REGISTRY[+card.dataset.idx].code;
+      card._result = r; card._code = CODE_REGISTRY[+card.dataset.idx].code; card._stdin = CODE_REGISTRY[+card.dataset.idx].stdin;
       const n = r.steps.length;
       card.querySelector('[data-act="run"]')?.remove();
       const vb = card.querySelector('[data-act="viz"]');
@@ -203,7 +204,7 @@
           <button data-cx="out" role="tab">▸ Output</button>
           <button data-cx="bd" role="tab">🔍 Line by line</button>
         </div>
-        <div class="cx-pane" data-pane="out"><pre class="cx-out">${outputHTML(r)}</pre></div>
+        <div class="cx-pane" data-pane="out">${card._stdin ? `<div class="cx-in">⌨️ Sample input (what the user typed, one line per <code>input()</code> call): ${card._stdin.split("\n").map(l => `<kbd>${esc(l) || "↵"}</kbd>`).join(" ")} <span class="muted">· change it with ✎ Edit &amp; run</span></div>` : ""}<pre class="cx-out">${outputHTML(r)}</pre></div>
         <div class="cx-pane" data-pane="bd" hidden></div>
         <div class="cx-pane" data-pane="viz" hidden tabindex="0"></div></div>`);
       card._want = pref === "out" || pref === "bd" ? pref : (n >= 4 ? "viz" : "out");

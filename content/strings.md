@@ -60,6 +60,10 @@ Slicing rules are identical to lists (see *Lists*). Slices never raise errors, a
 
 ## 4. f-strings and the format mini-language
 
+:::note New to f-strings?
+Start with [Input, Output & f-strings](#/t/io-basics), which builds them up from zero. This section goes deeper.
+:::
+
 ```python
 name, score, ratio, n = "Ada", 98.567, 0.4567, 1234567
 print(f"{name} scored {score:.1f}")                 # fixed decimals

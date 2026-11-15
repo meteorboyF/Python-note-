@@ -46,10 +46,11 @@ def blocks(src):
             # marked dedents fences by the opening fence's indentation
             ind = len(m.string) - len(m.string.lstrip())
             text = "\n".join(l[ind:] if l[:ind].strip() == "" else l.lstrip() for l in body)
-            yield text
+            stdin = next((x[3:].replace(";", "\n").replace("+", " ") for x in flags if x.startswith("in:")), "")
+            yield text, stdin
 
 
-def trace_one(code):
+def trace_one(code, stdin=""):
     os.environ["MPLBACKEND"] = "Agg"
     sys.path.insert(0, os.path.join(ROOT, "assets", "py"))
     import tracer
@@ -77,11 +78,11 @@ def trace_one(code):
 
         start = os.getcwd()
         fresh()
-        r = json.loads(tracer.run_user(code, "trace", ""))
+        r = json.loads(tracer.run_user(code, "trace", stdin))
         import shutil, tempfile
         os.chdir(tempfile.mkdtemp(prefix="pn-ex-"))       # clean folder for the plain run too
         fresh()
-        full = json.loads(tracer.run_user(code, "run", ""))   # plain run, no instrumentation
+        full = json.loads(tracer.run_user(code, "run", stdin))   # plain run, no instrumentation
         if r["truncated"]:                       # trace was cut: keep the complete output too
             r["full"] = {"stdout": full["stdout"], "error": full["error"], "errLine": full["errLine"]}
             r["figures"] = full["figures"]
@@ -135,11 +136,11 @@ def delta_frames(steps):
 
 
 def work(args):
-    slug, h, code = args
+    slug, h, code, stdin = args
     import tempfile
     os.chdir(tempfile.mkdtemp(prefix="pn-ex-"))       # every example gets a clean folder
     try:
-        r = trace_one(code)
+        r = trace_one(code, stdin)
     except BaseException as e:   # timeouts etc.
         return slug, h, None, f"{type(e).__name__}: {e}"
     return slug, h, r, None
@@ -154,11 +155,11 @@ def main():
         if want and slug not in want:
             continue
         seen = set()
-        for code in blocks(open(path, encoding="utf-8").read()):
+        for code, stdin in blocks(open(path, encoding="utf-8").read()):
             h = fnv(code)
             if h not in seen:
                 seen.add(h)
-                jobs.append((slug, h, code))
+                jobs.append((slug, h, code, stdin))
     results = {}
     problems = []
     done = 0

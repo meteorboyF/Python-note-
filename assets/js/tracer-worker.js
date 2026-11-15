@@ -4,7 +4,7 @@ let py = null;
 const ready = (async () => {
   postMessage({ type: "status", msg: "Downloading the Python runtime (first time only)…" });
   py = await loadPyodide();
-  const src = await (await fetch(new URL("../py/tracer.py?v=8", import.meta.url))).text();
+  const src = await (await fetch(new URL("../py/tracer.py?v=9", import.meta.url))).text();
   py.runPython(src);
   postMessage({ type: "ready" });
 })().catch(err => postMessage({ type: "fatal", msg: String(err) }));

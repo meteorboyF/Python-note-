@@ -5,6 +5,7 @@ window.PARTS = [
     blurb: "How Python really thinks: names, objects, flow, functions and the tools every program uses.",
     topics: [
       { slug: "variables", title: "Variables & Data Types", desc: "Names vs objects, types, mutability, the memory model." },
+      { slug: "io-basics", title: "Input, Output & f-strings", desc: "print() in depth, input() and type conversion, validating input, f-string formatting.", isNew: true },
       { slug: "operators", title: "Operators & Expressions", desc: "Floor division, short-circuiting, precedence, walrus, bitwise.", isNew: true },
       { slug: "control-flow", title: "Control Flow", desc: "if/elif, loops, loop-else, break/continue, match-case." },
       { slug: "functions", title: "Functions", desc: "Parameters, *args/**kwargs, defaults, lambda, LEGB scope, recursion." },

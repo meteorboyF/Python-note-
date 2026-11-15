@@ -671,3 +671,5 @@ table.sel td { width: auto; white-space: nowrap; }
 }
 .test-figs { margin-top: 10px; display: grid; gap: 6px; font-family: var(--font-body); }
 .test-figs img { max-width: 100%; background: #fff; border-radius: 8px; border: 1px solid var(--line); }
+.cx-in { padding: 8px 16px 0; font-size: .8rem; color: var(--ink-2); }
+.cx-in kbd { font: 600 12px var(--font-mono); background: var(--surface-2); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; margin: 0 2px; }

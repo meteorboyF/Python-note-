@@ -741,14 +741,15 @@ def _err_text(e):
 
 def run_user(code, mode="trace", stdin=""):
     out = _Out()
-    inputs = iter(stdin.splitlines())
+    inputs = iter(stdin.split("\n") if stdin else [])     # "a\n" = 'a' then an empty line
 
     def fake_input(prompt=""):
         out.write(str(prompt))
         try:
             val = next(inputs)
         except StopIteration:
-            val = ""
+            out.write("\n")
+            raise EOFError("no more input (add more lines in the input box under ✎ Edit & run)") from None
         out.write(val + "\n")
         return val
 
