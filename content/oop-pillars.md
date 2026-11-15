@@ -264,6 +264,60 @@ Inherit when the subclass **truly is** a specialised version and honours the par
 | 9 | Forgetting that a base method calling `self.x()` uses the override | design hooks deliberately |
 | 10 | Overloading by signature (doesn't exist) | defaults, `*args`, `singledispatch` |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+from abc import ABC, abstractmethod
+class Shape(ABC):
+    @abstractmethod
+    def area(self): ...
+class Square(Shape):
+    def __init__(self, s): self.s = s
+try:
+    Square(2)
+except TypeError:
+    print("cannot instantiate")
+```
+What prints?
+- [x] `cannot instantiate`
+- [ ] nothing
+- [ ] `NotImplementedError`
+`Square` didn't implement the abstract `area`, so it's still abstract. Python refuses to **create** it at all, which catches the mistake early instead of when `area()` is finally called.
+:::
+
+:::quiz
+```python norun
+class Account:
+    def __init__(self):
+        self.__pin = 1234
+a = Account()
+print(hasattr(a, "__pin"), a._Account__pin)
+```
+What prints?
+- [ ] `True 1234`
+- [x] `False 1234`
+- [ ] `AttributeError`
+**Name mangling** renames `__pin` to `_Account__pin` inside the class. It's not real privacy (you can still reach it), just protection against accidental name clashes in subclasses.
+:::
+
+:::quiz
+```python norun
+class Duck:
+    def speak(self): return "quack"
+class Robot:
+    def speak(self): return "beep"
+print([x.speak() for x in (Duck(), Robot(), "text") if hasattr(x, "speak")])
+```
+What prints?
+- [x] `['quack', 'beep']`
+- [ ] `TypeError`
+- [ ] `['quack', 'beep', None]`
+**Duck typing**: no shared base class is needed, only the method. The string has no `speak`, so the `hasattr` filter skips it. That's polymorphism without inheritance.
+:::
+
 ## Practice problems
 
 :::problem basic | Employee payroll polymorphism | inheritance, overriding
@@ -627,4 +681,301 @@ print(AREA["square"]({"type": "square", "side": 4}))
 ```
 :::explain
 The `if/elif` chain must be **edited** for every new shape (closed for extension). The dispatch dict and `singledispatch` are **open**: new behaviour is registered from anywhere, even another module. Methods on the classes (`shape.area()`) are the classic OOP answer. `singledispatch` is useful when you **can't** modify the classes (third-party types) or want to keep an operation's code together. Knowing these trade-offs is what "design" interviews probe.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Shapes with an abstract base class | Real-world task
+Create an abstract `Shape` with abstract `area()` and `perimeter()`, plus a concrete `describe()` returning `"<ClassName> area=<a> perimeter=<p>"` (2 decimals). Implement `Circle(r)`, `Rectangle(w, h)` and `Square(s)` (a subclass of Rectangle). Write `total_area(shapes)`.
+:::starter
+```python norun
+from abc import ABC, abstractmethod
+import math
+
+class Shape(ABC):
+    pass
+```
+:::tests
+```python norun
+import math
+shapes = [Circle(1), Rectangle(2, 3), Square(2)]
+assert abs(total_area(shapes) - (math.pi + 6 + 4)) < 1e-9
+assert Square(2).describe() == "Square area=4.00 perimeter=8.00"
+assert Circle(1).describe() == "Circle area=3.14 perimeter=6.28"
+assert isinstance(Square(1), Rectangle) and isinstance(Square(1), Shape)
+assert raises(TypeError, Shape)
+```
+:::solution
+```python
+from abc import ABC, abstractmethod
+import math
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self): ...
+    @abstractmethod
+    def perimeter(self): ...
+    def describe(self):                         # written ONCE against the abstraction
+        return f"{type(self).__name__} area={self.area():.2f} perimeter={self.perimeter():.2f}"
+
+class Circle(Shape):
+    def __init__(self, r): self.r = r
+    def area(self): return math.pi * self.r ** 2
+    def perimeter(self): return 2 * math.pi * self.r
+
+class Rectangle(Shape):
+    def __init__(self, w, h): self.w, self.h = w, h
+    def area(self): return self.w * self.h
+    def perimeter(self): return 2 * (self.w + self.h)
+
+class Square(Rectangle):
+    def __init__(self, s): super().__init__(s, s)
+
+def total_area(shapes):
+    return sum(s.area() for s in shapes)        # polymorphism: no isinstance checks
+
+for s in [Circle(1), Rectangle(2, 3), Square(2)]:
+    print(s.describe())
+```
+:::explain
+All four pillars appear in about 25 lines. **Abstraction**: `Shape` defines the contract. **Inheritance**: `Square` reuses `Rectangle`. **Polymorphism**: `total_area` and `describe` call `area()` without knowing the concrete type. **Encapsulation**: each shape keeps its own dimensions. `type(self).__name__` makes `describe` print the real subclass name.
+:::complexity
+O(n) for `total_area`.
+:::end
+
+:::program medium | Payment processor (polymorphism) | Real-world task
+Write a `checkout(cart_total, method)` that works with **any** payment object having `pay(amount) -> str` and `fee(amount) -> float`. Implement `Card` (2.9% + 0.30 fee), `Wallet(balance)` (no fee; raises `ValueError("insufficient balance")` if `amount + fee` is more than the balance, and deducts on success) and `Crypto` (a flat 1.5 fee). `checkout` returns `(message, total_charged)`, with the total rounded to 2 decimals.
+:::starter
+```python norun
+def checkout(cart_total, method):
+    pass
+```
+:::tests
+```python norun
+msg, total = checkout(100, Card("4242"))
+assert total == 103.2 and "4242" in msg
+w = Wallet(50)
+assert checkout(20, w)[1] == 20.0 and w.balance == 30
+assert raises(ValueError, checkout, 31, w) and w.balance == 30
+assert checkout(10, Crypto())[1] == 11.5
+class Voucher:
+    def fee(self, amount): return 0
+    def pay(self, amount): return "voucher used"
+assert checkout(5, Voucher()) == ("voucher used", 5.0)
+```
+:::solution
+```python
+class Card:
+    def __init__(self, last4): self.last4 = last4
+    def fee(self, amount): return amount * 0.029 + 0.30
+    def pay(self, amount): return f"charged card ****{self.last4}"
+
+class Wallet:
+    def __init__(self, balance): self.balance = balance
+    def fee(self, amount): return 0.0
+    def pay(self, amount):
+        if amount > self.balance:
+            raise ValueError("insufficient balance")
+        self.balance -= amount
+        return f"wallet debited, {self.balance} left"
+
+class Crypto:
+    def fee(self, amount): return 1.5
+    def pay(self, amount): return "sent on-chain"
+
+def checkout(cart_total, method):
+    total = round(cart_total + method.fee(cart_total), 2)
+    message = method.pay(total)
+    return message, total
+
+for m in (Card("4242"), Wallet(50), Crypto()):
+    print(type(m).__name__, checkout(20, m))
+```
+:::explain
+`checkout` depends only on a **behaviour** (`fee` + `pay`), not on any class hierarchy. That's why the `Voucher` defined inside the tests (which `checkout` has never heard of) works too: **duck typing**. Adding a payment method never requires editing `checkout` (the **open/closed principle**). A failed wallet payment raises before changing the balance, so no partial state is left behind.
+:::complexity
+O(1).
+:::end
+
+:::program medium | Bank accounts with encapsulation | Real-world task
+Create `Account(owner, balance=0)` with a **read-only** `balance` property, `deposit`/`withdraw` (raising `ValueError` for non-positive amounts or insufficient funds), and a private transaction log exposed only as a **tuple** copy via `history`. Then `SavingsAccount(Account)` adds `rate` and `add_interest()`, and forbids withdrawals that would leave less than a `minimum` of 100.
+:::starter
+```python norun
+class Account:
+    def __init__(self, owner, balance=0):
+        pass
+```
+:::tests
+```python norun
+a = Account("Ada", 50)
+a.deposit(25); a.withdraw(10)
+assert a.balance == 65 and a.history == (("deposit", 25), ("withdraw", 10))
+assert raises(AttributeError, setattr, a, "balance", 999)
+assert raises(ValueError, a.withdraw, 1000) and raises(ValueError, a.deposit, -5)
+assert isinstance(a.history, tuple)
+s = SavingsAccount("Bo", 500, rate=0.1)
+s.add_interest()
+assert s.balance == 550 and s.history[-1] == ("interest", 50.0)
+assert raises(ValueError, s.withdraw, 460) and s.balance == 550
+s.withdraw(450); assert s.balance == 100
+```
+:::hint
+Store the state in `self._balance` and `self._log`. The subclass should **extend** `withdraw` (check its extra rule, then call `super().withdraw`) instead of duplicating the logic.
+:::solution
+```python
+class Account:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self._balance = balance
+        self._log = []
+
+    @property
+    def balance(self):
+        return self._balance
+
+    @property
+    def history(self):
+        return tuple(self._log)                  # callers can't mutate our log
+
+    def _record(self, kind, amount):
+        self._log.append((kind, amount))
+
+    def deposit(self, amount):
+        if amount <= 0:
+            raise ValueError("deposit must be positive")
+        self._balance += amount
+        self._record("deposit", amount)
+
+    def withdraw(self, amount):
+        if amount <= 0:
+            raise ValueError("withdrawal must be positive")
+        if amount > self._balance:
+            raise ValueError("insufficient funds")
+        self._balance -= amount
+        self._record("withdraw", amount)
+
+class SavingsAccount(Account):
+    MINIMUM = 100
+
+    def __init__(self, owner, balance=0, rate=0.02):
+        super().__init__(owner, balance)
+        self.rate = rate
+
+    def add_interest(self):
+        interest = round(self._balance * self.rate, 2)
+        self._balance += interest
+        self._record("interest", interest)
+
+    def withdraw(self, amount):                   # extend, don't replace
+        if self._balance - amount < self.MINIMUM:
+            raise ValueError(f"must keep at least {self.MINIMUM}")
+        super().withdraw(amount)
+
+s = SavingsAccount("Bo", 500, rate=0.1)
+s.add_interest(); s.withdraw(100)
+print(s.balance, s.history)
+```
+:::explain
+**Encapsulation**: the balance can only change through methods that enforce the rules. The read-only property blocks `a.balance = 999`, and the history is exposed as an immutable tuple **copy**. **Inheritance**: `SavingsAccount` adds a rule and then defers to `super().withdraw`, so the validation and logging aren't duplicated. A failed withdrawal raises before anything changes.
+:::complexity
+O(1) per operation.
+:::end
+
+:::program hard | Expression tree with polymorphic nodes | Real-world task
+Build an expression tree with classes `Num(value)`, `Add(a, b)`, `Mul(a, b)`, `Neg(a)` and `Var(name)`, all subclasses of an abstract `Expr` with `evaluate(env)` and `__str__`. `str()` must use **minimal parentheses** (`Mul(Add(1, 2), 3)` → `"(1 + 2) * 3"`, `Add(1, Mul(2, 3))` → `"1 + 2 * 3"`). Add `simplify()`: `x * 1 → x`, `x * 0 → 0`, `x + 0 → x`, constant folding, and double negation.
+:::starter
+```python norun
+from abc import ABC, abstractmethod
+
+class Expr(ABC):
+    pass
+```
+:::tests
+```python norun
+e = Mul(Add(Num(1), Num(2)), Var("x"))
+assert str(e) == "(1 + 2) * x" and e.evaluate({"x": 4}) == 12
+assert str(Add(Num(1), Mul(Num(2), Num(3)))) == "1 + 2 * 3"
+assert str(Neg(Add(Var("a"), Num(1)))) == "-(a + 1)"
+assert str(Mul(Var("y"), Num(1)).simplify()) == "y"
+assert str(Add(Mul(Var("y"), Num(0)), Var("z")).simplify()) == "z"
+assert str(Add(Num(2), Num(3)).simplify()) == "5"
+assert str(Neg(Neg(Var("q"))).simplify()) == "q"
+assert str(Mul(Add(Num(1), Num(1)), Var("x")).simplify()) == "2 * x"
+assert raises(KeyError, Var("w").evaluate, {})
+```
+:::hint
+Give every class a `prec` (precedence: `Add` 1, `Mul` 2, `Neg` 3, atoms 4). A child needs parentheses when its `prec` is lower than its parent's. `simplify` first simplifies the children, then applies the rules.
+:::solution
+```python
+from abc import ABC, abstractmethod
+
+class Expr(ABC):
+    prec = 4
+    @abstractmethod
+    def evaluate(self, env): ...
+    @abstractmethod
+    def __str__(self): ...
+    def simplify(self):
+        return self
+    def wrap(self, child):
+        return f"({child})" if child.prec < self.prec else str(child)
+
+class Num(Expr):
+    def __init__(self, value): self.value = value
+    def evaluate(self, env): return self.value
+    def __str__(self): return str(self.value)
+
+class Var(Expr):
+    def __init__(self, name): self.name = name
+    def evaluate(self, env): return env[self.name]
+    def __str__(self): return self.name
+
+class Neg(Expr):
+    prec = 3
+    def __init__(self, a): self.a = a
+    def evaluate(self, env): return -self.a.evaluate(env)
+    def __str__(self): return "-" + self.wrap(self.a)
+    def simplify(self):
+        a = self.a.simplify()
+        if isinstance(a, Neg):
+            return a.a                       # --x -> x
+        if isinstance(a, Num):
+            return Num(-a.value)
+        return Neg(a)
+
+class BinOp(Expr):
+    symbol = "?"
+    def __init__(self, a, b): self.a, self.b = a, b
+    def __str__(self): return f"{self.wrap(self.a)} {self.symbol} {self.wrap(self.b)}"
+
+class Add(BinOp):
+    prec, symbol = 1, "+"
+    def evaluate(self, env): return self.a.evaluate(env) + self.b.evaluate(env)
+    def simplify(self):
+        a, b = self.a.simplify(), self.b.simplify()
+        if isinstance(a, Num) and isinstance(b, Num): return Num(a.value + b.value)
+        if isinstance(a, Num) and a.value == 0: return b
+        if isinstance(b, Num) and b.value == 0: return a
+        return Add(a, b)
+
+class Mul(BinOp):
+    prec, symbol = 2, "*"
+    def evaluate(self, env): return self.a.evaluate(env) * self.b.evaluate(env)
+    def simplify(self):
+        a, b = self.a.simplify(), self.b.simplify()
+        if isinstance(a, Num) and isinstance(b, Num): return Num(a.value * b.value)
+        for x, y in ((a, b), (b, a)):
+            if isinstance(x, Num) and x.value == 0: return Num(0)
+            if isinstance(x, Num) and x.value == 1: return y
+        return Mul(a, b)
+
+e = Add(Mul(Add(Num(1), Num(1)), Var("x")), Mul(Var("y"), Num(0)))
+print(e, "=>", e.simplify(), "=", e.simplify().evaluate({"x": 5}))
+```
+:::explain
+Each node class knows only its **own** rules for evaluating, printing and simplifying, and the recursion does the rest. That's polymorphism replacing a giant `if type == …` chain. `BinOp` holds the shared printing logic (inheritance), and `prec` + `wrap` produce minimal parentheses. `simplify` works **bottom-up**: simplify the children first, then match patterns. This is how compilers and computer-algebra systems are structured.
+:::complexity
+O(size of the tree) per operation.
 :::end

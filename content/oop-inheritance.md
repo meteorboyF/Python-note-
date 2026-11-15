@@ -213,6 +213,64 @@ print(type(C), type(type))     # classes are instances of `type`
 | 9 | Shadowing parent attributes accidentally | name mangling (`__x`) |
 | 10 | Base-class changes breaking subclasses (fragile base class) | small, documented hooks |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+class A:
+    def hi(self): return "A"
+class B(A):
+    def hi(self): return "B>" + super().hi()
+class C(A):
+    def hi(self): return "C>" + super().hi()
+class D(B, C):
+    pass
+print(D().hi(), [k.__name__ for k in D.__mro__][:4])
+```
+What prints?
+- [ ] `B>A ['D', 'B', 'A', 'C']`
+- [x] `B>C>A ['D', 'B', 'C', 'A']`
+- [ ] `B>A>C ['D', 'B', 'C', 'A']`
+The MRO is `D → B → C → A`. Inside `B.hi`, `super()` means **the next class in D's MRO**, which is `C`, not `A`. That's how cooperative multiple inheritance chains every class exactly once.
+:::
+
+:::quiz
+```python norun
+class Base:
+    def __init__(self):
+        self.ready = True
+class Child(Base):
+    def __init__(self):
+        self.extra = 1
+c = Child()
+print(hasattr(c, "ready"), hasattr(c, "extra"))
+```
+What prints?
+- [ ] `True True`
+- [x] `False True`
+- [ ] `AttributeError`
+Defining `__init__` in the child **replaces** the parent's, and Python doesn't call parent initialisers automatically. Without `super().__init__()`, `ready` is never set.
+:::
+
+:::quiz
+```python norun
+class UpperDict(dict):
+    def __setitem__(self, k, v):
+        super().__setitem__(k.upper(), v)
+d = UpperDict()
+d["a"] = 1
+d.update(b=2)
+print(sorted(d))
+```
+What prints?
+- [ ] `['A', 'B']`
+- [x] `['A', 'b']`
+- [ ] `['a', 'b']`
+The built-in `dict.update` is implemented in C and writes directly, **bypassing** your overridden `__setitem__`. Subclass `collections.UserDict` when you override core behaviour.
+:::
+
 ## Practice problems
 
 :::problem basic | Extend, don't replace | super()
@@ -458,15 +516,15 @@ for k in [F, E, Diamond, Y, bool, dict]:
     assert c3_mro(k) == list(k.__mro__), k
 print(" -> ".join(c.__name__ for c in c3_mro(F)))
 
-class Fake:                         # an impossible hierarchy, described manually
-    __bases__ = (X, Y)
+from types import SimpleNamespace
+Fake = SimpleNamespace(__name__="Fake", __bases__=(X, Y))   # an impossible hierarchy, described manually
 try:
     c3_mro(Fake)
 except TypeError as e:
     print("TypeError:", e)
 ```
 :::explain
-The MRO is the class followed by a **merge** of its bases' MROs plus the list of bases itself. At each step, pick the first head that doesn't appear in any list's **tail** (which would mean some class still needs to come before it). Remove it from every list and repeat. If no head qualifies, the constraints contradict each other. The `Fake` class tricks the function with a hand-made `__bases__`, because Python itself refuses to create `class Z(X, Y)` when `Y` subclasses `X`.
+The MRO is the class followed by a **merge** of its bases' MROs plus the list of bases itself. At each step, pick the first head that doesn't appear in any list's **tail** (which would mean some class still needs to come before it). Remove it from every list and repeat. If no head qualifies, the constraints contradict each other. `Fake` is a stand-in object with a hand-made `__bases__`, because Python itself refuses to create `class Z(X, Y)` when `Y` subclasses `X`. (A class body assignment `__bases__ = (X, Y)` would *not* work: `type.__bases__` is a data descriptor, so the real bases would win.)
 :::end
 
 :::problem hard | Diamond with state: diagnose double initialization | cooperative init
@@ -516,4 +574,282 @@ print([k.__name__ for k in SecureFast.__mro__])
 ```
 :::explain
 Explicit parent calls ignore the MRO: both branches run `Connection.__init__`, which in real code would leak a socket. Cooperative `super()` walks the single MRO `SecureFast → Encrypted → Compressed → Connection`, so each `__init__` runs **once**. Each class pops its own keyword (`cipher`, `level`, `host`) and forwards the rest. The chain ends at `object.__init__()` with no arguments left. This "consume your kwargs, forward the rest" rule is the key to making multiple inheritance safe.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Employee payroll hierarchy | Real-world task
+Create `Employee(name, salary)` with `pay()` returning the salary and `__repr__` like `Employee('Ada', 5000)`. `Manager(name, salary, reports)` adds a bonus of 10% of salary **per direct report** (up to 50%). `Intern(name, stipend)` is paid the stipend. Each subclass must **reuse** the parent via `super()`. Write `payroll(staff)` returning the total.
+:::starter
+```python norun
+class Employee:
+    def __init__(self, name, salary):
+        pass
+```
+:::tests
+```python norun
+e, m, i = Employee("Ada", 5000), Manager("Bo", 8000, reports=3), Intern("Cy", 1000)
+assert e.pay() == 5000 and m.pay() == 10400.0 and i.pay() == 1000
+assert Manager("Max", 10000, reports=9).pay() == 15000.0
+assert payroll([e, m, i]) == 16400.0
+assert repr(m) == "Manager('Bo', 8000)" and isinstance(i, Employee)
+assert Manager("Z", 100, reports=0).pay() == 100
+```
+:::solution
+```python
+class Employee:
+    def __init__(self, name, salary):
+        self.name, self.salary = name, salary
+    def pay(self):
+        return self.salary
+    def __repr__(self):
+        return f"{type(self).__name__}({self.name!r}, {self.salary})"
+
+class Manager(Employee):
+    def __init__(self, name, salary, reports=0):
+        super().__init__(name, salary)
+        self.reports = reports
+    def pay(self):
+        bonus = min(0.10 * self.reports, 0.50)
+        return super().pay() * (1 + bonus)
+
+class Intern(Employee):
+    def __init__(self, name, stipend):
+        super().__init__(name, stipend)
+
+def payroll(staff):
+    return sum(p.pay() for p in staff)
+
+team = [Employee("Ada", 5000), Manager("Bo", 8000, reports=3), Intern("Cy", 1000)]
+print(team, payroll(team))
+```
+:::explain
+`super().__init__` reuses the parent's setup, and `super().pay()` **extends** the base calculation instead of copying it. `type(self).__name__` in the base `__repr__` makes subclasses print their own names automatically. `payroll` never checks types: each object knows how to compute its own pay.
+:::complexity
+O(n).
+:::end
+
+:::program medium | Cooperative mixins | Real-world task
+Write mixins that work in any combination via `super()`:
+- `ReprMixin`: `__repr__` like `Point(x=1, y=2)` built from `vars(self)`;
+- `EqMixin`: equal when the types match and `vars()` match;
+- `JsonMixin`: `to_json()` (sorted keys) and a classmethod `from_json(text)` creating an instance of **the calling class**;
+- `ValidateMixin`: calls `self.validate()` at the end of `__init__` (cooperatively, so `__init__` arguments pass through).
+
+Use them in `Point(x, y)`, with validation requiring numbers.
+:::starter
+```python norun
+import json
+
+class ReprMixin:
+    pass
+```
+:::tests
+```python norun
+p = Point(1, 2)
+assert repr(p) == "Point(x=1, y=2)"
+assert p == Point(1, 2) and p != Point(2, 1)
+assert p.to_json() == '{"x": 1, "y": 2}'
+q = Point.from_json('{"x": 5, "y": 6}')
+assert type(q) is Point and q == Point(5, 6)
+assert raises(TypeError, Point, "a", 2)
+assert [c.__name__ for c in Point.__mro__][-1] == "object"
+```
+:::hint
+`ValidateMixin.__init__(self, *args, **kwargs)` should call `super().__init__(*args, **kwargs)` first, then `self.validate()`. List it **before** the class that holds the real `__init__` in the bases.
+:::solution
+```python
+import json
+
+class ReprMixin:
+    def __repr__(self):
+        fields = ", ".join(f"{k}={v!r}" for k, v in vars(self).items())
+        return f"{type(self).__name__}({fields})"
+
+class EqMixin:
+    def __eq__(self, other):
+        return type(self) is type(other) and vars(self) == vars(other)
+    __hash__ = None                                   # mutable value objects shouldn't be hashable
+
+class JsonMixin:
+    def to_json(self):
+        return json.dumps(vars(self), sort_keys=True)
+    @classmethod
+    def from_json(cls, text):
+        return cls(**json.loads(text))
+
+class ValidateMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)             # let the next class in the MRO do the setup
+        self.validate()
+    def validate(self):
+        pass
+
+class _PointBase:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+
+class Point(ReprMixin, EqMixin, JsonMixin, ValidateMixin, _PointBase):
+    def validate(self):
+        if not all(isinstance(v, (int, float)) for v in (self.x, self.y)):
+            raise TypeError("coordinates must be numbers")
+
+p = Point.from_json('{"x": 3, "y": 4}')
+print(p, p == Point(3, 4), p.to_json(), [c.__name__ for c in Point.__mro__])
+```
+:::explain
+Each mixin adds **one** capability and relies only on generic hooks (`vars(self)`, `cls`, `super()`). `ValidateMixin` is cooperative: it forwards `*args, **kwargs` along the MRO to `_PointBase.__init__`, then validates once the attributes exist. `from_json` uses `cls(...)`, so any class mixing it in deserialises into itself. Defining `__eq__` sets `__hash__` to None anyway, and writing it explicitly documents the choice.
+:::complexity
+O(number of fields) per operation.
+:::end
+
+:::program medium | Animal shelter (inheritance + queues) | Cracking the Coding Interview 3.6
+An animal shelter holds `Dog`s and `Cat`s (subclasses of `Animal(name)`). Implement `Shelter` with `enqueue(animal)`, `dequeue_any()` (the **oldest** animal of any kind), `dequeue_dog()` and `dequeue_cat()` (the oldest of that kind). Each returns the animal's name, or `None` if there is none. Every operation must be O(1).
+:::starter
+```python norun
+from collections import deque
+
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+class Dog(Animal): pass
+class Cat(Animal): pass
+
+class Shelter:
+    pass
+```
+:::tests
+```python norun
+s = Shelter()
+for a in [Dog("rex"), Cat("tom"), Dog("fido"), Cat("kit")]:
+    s.enqueue(a)
+assert s.dequeue_cat() == "tom"
+assert s.dequeue_any() == "rex"
+assert s.dequeue_any() == "fido"
+assert s.dequeue_dog() is None
+assert s.dequeue_any() == "kit" and s.dequeue_any() is None
+assert raises(TypeError, s.enqueue, "not an animal")
+```
+:::hint
+Keep two deques (dogs, cats) and stamp each animal with an increasing **arrival number**. `dequeue_any` compares the arrival numbers at the fronts of the two queues.
+:::solution
+```python
+from collections import deque
+import itertools
+
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+class Dog(Animal): pass
+class Cat(Animal): pass
+
+class Shelter:
+    def __init__(self):
+        self.queues = {Dog: deque(), Cat: deque()}
+        self.clock = itertools.count()
+
+    def enqueue(self, animal):
+        if not isinstance(animal, Animal) or type(animal) not in self.queues:
+            raise TypeError("only dogs and cats are accepted")
+        self.queues[type(animal)].append((next(self.clock), animal))
+
+    def _pop(self, kind):
+        q = self.queues[kind]
+        return q.popleft()[1].name if q else None
+
+    def dequeue_dog(self):
+        return self._pop(Dog)
+
+    def dequeue_cat(self):
+        return self._pop(Cat)
+
+    def dequeue_any(self):
+        fronts = [(q[0][0], kind) for kind, q in self.queues.items() if q]
+        return self._pop(min(fronts)[1]) if fronts else None
+
+s = Shelter()
+for a in [Dog("rex"), Cat("tom"), Dog("fido")]:
+    s.enqueue(a)
+print(s.dequeue_cat(), s.dequeue_any(), s.dequeue_any(), s.dequeue_any())
+```
+:::explain
+The **class itself** is used as a dict key: `type(animal)` routes each animal to its own queue, so adding a `Rabbit` subclass is one line. An increasing timestamp from `itertools.count()` remembers the global arrival order across separate queues, and `dequeue_any` just compares the two queue fronts. That gives O(1) everything, with no scanning.
+:::complexity
+O(1) per operation.
+:::end
+
+:::program hard | Compute the MRO yourself (C3) | Real-world task
+Implement `c3_mro(cls)` that computes a class's MRO from `cls.__bases__` using **C3 linearisation**, matching Python's `cls.__mro__`, and raises `TypeError` for inconsistent hierarchies. Return a list of classes.
+:::starter
+```python norun
+def c3_mro(cls):
+    pass
+```
+:::tests
+```python norun
+class O: pass
+class A(O): pass
+class B(O): pass
+class C(O): pass
+class D(A, B): pass
+class E(B, C): pass
+class F(D, E): pass
+assert c3_mro(F) == list(F.__mro__)
+assert [k.__name__ for k in c3_mro(F)] == ["F", "D", "A", "E", "B", "C", "O", "object"]
+assert c3_mro(bool) == list(bool.__mro__)
+assert c3_mro(object) == [object]
+class X: pass
+class Y(X): pass
+from types import SimpleNamespace
+Fake = SimpleNamespace(__name__="Fake", __bases__=(X, Y))
+assert raises(TypeError, c3_mro, Fake)
+```
+:::hint
+`L(C) = [C] + merge(L(B1), L(B2), …, [B1, B2, …])`. While the lists are non-empty, pick the first **head** that doesn't appear in the **tail** of any list, append it, and remove it from every list's head. If no head qualifies, raise TypeError.
+:::solution
+```python
+def c3_mro(cls):
+    if cls is object:
+        return [object]
+    seqs = [c3_mro(b) for b in cls.__bases__] + [list(cls.__bases__)]
+    result = [cls]
+    while True:
+        seqs = [s for s in seqs if s]
+        if not seqs:
+            return result
+        for s in seqs:
+            head = s[0]
+            if not any(head in other[1:] for other in seqs):
+                break
+        else:
+            raise TypeError(f"cannot create a consistent MRO for {cls.__name__}")
+        result.append(head)
+        for s in seqs:
+            if s[0] is head:
+                del s[0]
+
+class O: pass
+class A(O): pass
+class B(O): pass
+class D(A, B): pass
+print([k.__name__ for k in c3_mro(D)], c3_mro(D) == list(D.__mro__))
+```
+:::explain
+C3 guarantees three things: a class comes before its bases, the order of bases in each class statement is kept, and every parent's own MRO order is preserved. The merge step enforces this by refusing to pick a class that some list still needs to put **after** something else (i.e. it appears in a tail). The `Fake` stand-in (a `SimpleNamespace` with `__bases__`) sneaks in `(X, Y)` with Y being a subclass of X, which is impossible to order, so the `for … else` raises, just like Python does at class-creation time.
+:::trace
+`F(D, E)`: merge(DABO, EBCO, DE)
+| step | lists | pick |
+|---|---|---|
+| 1 | DABO · EBCO · DE | D |
+| 2 | ABO · EBCO · E | A |
+| 3 | BO · EBCO · E | E (B is blocked: in the tail of EBCO) |
+| 4 | BO · BCO | B |
+| 5 | O · CO | C (O is blocked) |
+| 6 | O · O | O, then object |
+:::complexity
+O(n²) in the size of the hierarchy, which is tiny in practice.
 :::end

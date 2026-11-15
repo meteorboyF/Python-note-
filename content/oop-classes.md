@@ -243,6 +243,58 @@ Use a class when you have **state + behaviour** that belong together and **sever
 | 9 | Typos create new attributes silently (`self.nmae = …`) | `__slots__` or linters |
 | 10 | Huge "God classes" | split responsibilities |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+class Cart:
+    items = []
+    def add(self, x):
+        self.items.append(x)
+a, b = Cart(), Cart()
+a.add("pen")
+print(b.items, "items" in vars(a))
+```
+What prints?
+- [ ] `[] True`
+- [x] `['pen'] False`
+- [ ] `['pen'] True`
+`items` is a **class attribute**: one list shared by every Cart. `self.items.append` *mutates* it without ever creating an instance attribute, so `vars(a)` (the instance `__dict__`) is empty.
+:::
+
+:::quiz
+```python norun
+class Counter:
+    count = 0
+    def __init__(self):
+        self.count += 1
+c1, c2 = Counter(), Counter()
+print(Counter.count, c1.count, c2.count)
+```
+What prints?
+- [ ] `2 2 2`
+- [x] `0 1 1`
+- [ ] `2 1 2`
+`self.count += 1` **reads** the class attribute (0), adds 1, and **assigns** to the instance, creating a new instance attribute each time. The class attribute stays 0. To count instances, write `Counter.count += 1`.
+:::
+
+:::quiz
+```python norun
+class P:
+    def __init__(self, x):
+        self.x = x
+a, b = P(1), P(1)
+print(a == b, a is b, len({a, b}))
+```
+What prints?
+- [x] `False False 2`
+- [ ] `True False 1`
+- [ ] `True False 2`
+Without `__eq__`, objects compare by **identity**, so two separately created objects are unequal even with the same data. They also hash by identity, so the set keeps both. Define `__eq__` + `__hash__` (or use `@dataclass(frozen=True)`) for value semantics.
+:::
+
 ## Practice problems
 
 :::problem basic | Bank account | __init__, methods, validation
@@ -631,4 +683,267 @@ print(p(2), p.add(q), p.mul(q), p.derivative(), sep=" | ")
 ```
 :::explain
 **Horner's method** evaluates a degree-n polynomial with n multiplications and n additions, with no powers needed. Multiplication is a **convolution** of the coefficient lists: the term `i+j` collects `aᵢ·bⱼ`. Normalising (stripping trailing zeros) in `__init__` keeps `degree()` and equality honest. `__call__` makes instances callable like functions (`p(2)`). The *Dunder Methods* chapter adds `+`, `*` and `==`.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Design parking system | LeetCode 1603 | https://leetcode.com/problems/design-parking-system/
+Create `ParkingSystem(big, medium, small)` with slot counts per car type. `add_car(car_type)` (1 = big, 2 = medium, 3 = small) parks the car and returns True if a slot of that type is free, otherwise False. (LeetCode calls the method `addCar`.)
+:::starter
+```python norun
+class ParkingSystem:
+    def __init__(self, big, medium, small):
+        pass
+    def add_car(self, car_type):
+        pass
+```
+:::tests
+```python norun
+p = ParkingSystem(1, 1, 0)
+assert p.add_car(1) is True
+assert p.add_car(2) is True
+assert p.add_car(3) is False
+assert p.add_car(1) is False
+q = ParkingSystem(0, 2, 0)
+assert [q.add_car(2), q.add_car(2), q.add_car(2)] == [True, True, False]
+assert p.add_car(2) is False
+```
+:::solution
+```python
+class ParkingSystem:
+    def __init__(self, big, medium, small):
+        self.free = {1: big, 2: medium, 3: small}      # per-INSTANCE state
+    def add_car(self, car_type):
+        if self.free[car_type] == 0:
+            return False
+        self.free[car_type] -= 1
+        return True
+
+lot = ParkingSystem(1, 1, 0)
+print(lot.add_car(1), lot.add_car(3), lot.free)
+```
+:::explain
+All state lives on `self`, created in `__init__`, so two parking lots never share counts (the last test checks this). A dict keyed by car type replaces three nearly identical `if` branches. **State + the methods that guard it** is exactly what a class is for.
+:::complexity
+O(1) per call.
+:::end
+
+:::program medium | Design browser history | LeetCode 1472 | https://leetcode.com/problems/design-browser-history/
+Implement `BrowserHistory(homepage)` with:
+- `visit(url)`: go to `url` and clear all forward history;
+- `back(steps)`: move back up to `steps` pages and return the current URL;
+- `forward(steps)`: move forward up to `steps` pages and return the current URL.
+:::starter
+```python norun
+class BrowserHistory:
+    def __init__(self, homepage):
+        pass
+    def visit(self, url):
+        pass
+    def back(self, steps):
+        pass
+    def forward(self, steps):
+        pass
+```
+:::tests
+```python norun
+b = BrowserHistory("leetcode.com")
+b.visit("google.com"); b.visit("facebook.com"); b.visit("youtube.com")
+assert b.back(1) == "facebook.com"
+assert b.back(1) == "google.com"
+assert b.forward(1) == "facebook.com"
+b.visit("linkedin.com")
+assert b.forward(2) == "linkedin.com"
+assert b.back(2) == "google.com"
+assert b.back(7) == "leetcode.com"
+assert b.forward(10) == "linkedin.com"
+```
+:::hint
+Keep a list of pages plus a `cur` index and an `end` index (the last valid page). `visit` writes at `cur + 1` and sets `end` there, which "forgets" the forward pages in O(1). Clamp movements with `max`/`min`.
+:::solution
+```python
+class BrowserHistory:
+    def __init__(self, homepage):
+        self.pages = [homepage]
+        self.cur = 0
+        self.end = 0                       # the last valid index (forward limit)
+    def visit(self, url):
+        self.cur += 1
+        if self.cur == len(self.pages):
+            self.pages.append(url)
+        else:
+            self.pages[self.cur] = url     # overwrite instead of deleting the forward pages
+        self.end = self.cur
+    def back(self, steps):
+        self.cur = max(0, self.cur - steps)
+        return self.pages[self.cur]
+    def forward(self, steps):
+        self.cur = min(self.end, self.cur + steps)
+        return self.pages[self.cur]
+
+h = BrowserHistory("home")
+h.visit("a"); h.visit("b"); h.visit("c")
+print(h.back(2), h.forward(1), end=" | ")
+h.visit("x")
+print(h.forward(5), h.pages, h.end)
+```
+:::explain
+Instead of slicing off the forward history on every `visit` (O(n)), we keep an `end` marker. Pages past `end` are stale and simply get overwritten later. `max`/`min` clamping makes over-long jumps safe. This **index + bound** design gives O(1) for every operation, and it's the same trick behind undo stacks and ring buffers.
+:::trace
+| op | pages | cur | end | returns |
+|---|---|---|---|---|
+| init | [lc] | 0 | 0 | |
+| visit ×3 | [lc, g, f, y] | 3 | 3 | |
+| back(1) | | 2 | 3 | f |
+| back(1) | | 1 | 3 | g |
+| forward(1) | | 2 | 3 | f |
+| visit(li) | [lc, g, f, li] | 3 | 3 | |
+| back(2) | | 1 | 3 | g |
+:::complexity
+O(1) per operation (amortised for append).
+:::end
+
+:::program medium | Design an ATM machine | LeetCode 2241 | https://leetcode.com/problems/design-an-atm-machine/
+The ATM holds banknotes of 20, 50, 100, 200 and 500. `deposit(counts)` adds `[n20, n50, n100, n200, n500]` notes. `withdraw(amount)` **greedily** uses the largest notes first. If the exact amount can't be paid this way, return `[-1]` and change **nothing**. Otherwise remove the notes and return the counts used, in the same order.
+:::starter
+```python norun
+class ATM:
+    def __init__(self):
+        pass
+    def deposit(self, banknotes_count):
+        pass
+    def withdraw(self, amount):
+        pass
+```
+:::tests
+```python norun
+atm = ATM()
+atm.deposit([0, 0, 1, 2, 1])
+assert atm.withdraw(600) == [0, 0, 1, 0, 1]
+atm.deposit([0, 1, 0, 1, 1])
+assert atm.withdraw(600) == [-1]
+assert atm.withdraw(550) == [0, 1, 0, 0, 1]
+a2 = ATM(); a2.deposit([1, 0, 0, 0, 0])
+assert a2.withdraw(40) == [-1] and a2.withdraw(20) == [1, 0, 0, 0, 0] and a2.withdraw(20) == [-1]
+```
+:::hint
+Compute the full plan first (largest note first: `take = min(count, amount // value)`). Only if the remaining amount reaches 0, apply the plan. That's the "validate, then commit" pattern.
+:::solution
+```python
+class ATM:
+    VALUES = (20, 50, 100, 200, 500)
+
+    def __init__(self):
+        self.counts = [0] * 5
+
+    def deposit(self, banknotes_count):
+        for i, n in enumerate(banknotes_count):
+            self.counts[i] += n
+
+    def withdraw(self, amount):
+        plan = [0] * 5
+        for i in range(4, -1, -1):                      # largest note first
+            take = min(self.counts[i], amount // self.VALUES[i])
+            plan[i] = take
+            amount -= take * self.VALUES[i]
+        if amount:
+            return [-1]                                  # can't pay exactly: change nothing
+        for i in range(5):
+            self.counts[i] -= plan[i]
+        return plan
+
+atm = ATM()
+atm.deposit([0, 0, 1, 2, 1])
+print(atm.withdraw(600), atm.counts)
+```
+:::explain
+The key design rule is **atomicity**: compute the whole withdrawal on a scratch `plan`, and only mutate `self.counts` once success is guaranteed, so a failed request leaves the machine untouched. `VALUES` is a class attribute because it's genuinely shared by all ATMs, while `counts` is per-instance. Greedy is what the problem specifies, and it's why `600` fails after the second deposit (it takes a 500, then can't make 100 from what remains).
+:::complexity
+O(1): always 5 note types.
+:::end
+
+:::program hard | Design a text editor | LeetCode 2296 | https://leetcode.com/problems/design-a-text-editor/
+Implement `TextEditor` with a cursor:
+- `add_text(text)`: insert at the cursor (the cursor ends after the inserted text);
+- `delete_text(k)`: delete up to `k` characters left of the cursor, returning how many were deleted;
+- `cursor_left(k)` / `cursor_right(k)`: move, then return the last `min(10, len)` characters **left** of the cursor.
+
+Every operation must cost O(k), not O(length of the document).
+:::starter
+```python norun
+class TextEditor:
+    def __init__(self):
+        pass
+    def add_text(self, text):
+        pass
+    def delete_text(self, k):
+        pass
+    def cursor_left(self, k):
+        pass
+    def cursor_right(self, k):
+        pass
+```
+:::tests
+```python norun
+e = TextEditor()
+e.add_text("leetcode")
+assert e.delete_text(4) == 4
+e.add_text("practice")
+assert e.cursor_right(3) == "etpractice"
+assert e.cursor_left(8) == "leet"
+assert e.delete_text(10) == 4
+assert e.cursor_left(2) == ""
+assert e.cursor_right(6) == "practi"
+big = TextEditor(); big.add_text("x" * 100000)
+assert big.cursor_left(5) == "x" * 10 and big.delete_text(3) == 3
+```
+:::hint
+Use **two stacks**: `left` holds the characters before the cursor (top = the char just left of it) and `right` holds the characters after it, reversed. Moving the cursor pops from one stack and pushes onto the other.
+:::solution
+```python
+class TextEditor:
+    def __init__(self):
+        self.left = []      # characters before the cursor
+        self.right = []     # characters after the cursor, reversed (top = right next to the cursor)
+
+    def add_text(self, text):
+        self.left.extend(text)
+
+    def delete_text(self, k):
+        k = min(k, len(self.left))
+        del self.left[len(self.left) - k:]
+        return k
+
+    def _view(self):
+        return "".join(self.left[-10:])
+
+    def cursor_left(self, k):
+        for _ in range(min(k, len(self.left))):
+            self.right.append(self.left.pop())
+        return self._view()
+
+    def cursor_right(self, k):
+        for _ in range(min(k, len(self.right))):
+            self.left.append(self.right.pop())
+        return self._view()
+
+e = TextEditor()
+e.add_text("hello world")
+print(e.cursor_left(5), "|", e.delete_text(1), "|", e.cursor_right(99))
+```
+:::explain
+A Python string is immutable, so inserting in the middle copies the whole document: O(n) per keystroke. The **two-stack (gap buffer)** design keeps the cursor between two lists, so insert, delete and move all touch only the k affected characters at the **ends** of lists, which is O(1) each. Real editors use gap buffers or ropes for exactly this reason.
+:::trace
+| op | left | right (reversed) | returns |
+|---|---|---|---|
+| add "leetcode" | leetcode | | |
+| delete 4 | leet | | 4 |
+| add "practice" | leetpractice | | |
+| right 3 | leetpractice | | "etpractice" |
+| left 8 | leet | ecitcarp | "leet" |
+| delete 10 | (empty) | ecitcarp | 4 |
+:::complexity
+O(k) per operation, O(n) memory.
 :::end

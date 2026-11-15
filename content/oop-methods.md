@@ -209,6 +209,69 @@ print(A.__dict__["inst"].__get__(a, A)() is a)     # manual binding
 | 9 | Java-style `get_x()`/`set_x()` everywhere | plain attributes, then properties |
 | 10 | Properties with surprising side effects | keep getters pure |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+class Temp:
+    def __init__(self, c):
+        self.c = c
+    @property
+    def f(self):
+        return self.c * 9 / 5 + 32
+t = Temp(100)
+t.c = 0
+print(t.f)
+try:
+    t.f = 50
+except AttributeError:
+    print("read-only")
+```
+What prints?
+- [ ] `212.0` then `read-only`
+- [x] `32.0` then `read-only`
+- [ ] `32.0` then nothing
+The property is **computed on every access**, so it reflects the new `c`. A property without a setter is read-only, so assigning to it raises `AttributeError`.
+:::
+
+:::quiz
+```python norun
+class Shape:
+    @classmethod
+    def make(cls):
+        return cls()
+    @staticmethod
+    def kind():
+        return "shape"
+class Square(Shape):
+    pass
+print(type(Square.make()).__name__, Square.kind())
+```
+What prints?
+- [ ] `Shape shape`
+- [x] `Square shape`
+- [ ] `TypeError`
+A classmethod receives the class it was **called on** (`Square`), so `cls()` builds a Square: that's why alternative constructors use `cls`, not a hard-coded name. A staticmethod receives nothing implicit.
+:::
+
+:::quiz
+```python norun
+class A:
+    def hello(self):
+        return "hi"
+a = A()
+m = a.hello
+print(m(), A.hello(a), m.__self__ is a)
+```
+What prints?
+- [x] `hi hi True`
+- [ ] `hi TypeError`
+- [ ] `hi hi False`
+`a.hello` is a **bound method**: the function with `self` pre-filled, which you can store and call later. `A.hello(a)` is the same call written explicitly. `__self__` is the instance the method is bound to.
+:::
+
 ## Practice problems
 
 :::problem basic | Alternative constructors | @classmethod
@@ -515,4 +578,270 @@ print(log)
 ```
 :::explain
 `observable` is a **property factory**: each call builds a fresh getter/setter pair that closes over its own `attr` name. The setter notifies observers only on a **real change**. Note the order in `__init__`: `_observers` must exist before the first `self.price = …`, because the setter uses it. This is the Observer pattern implemented with descriptors, the same mechanism reactive UI frameworks and ORMs use to track changes.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Validated temperature | Real-world task
+Create `Temperature(celsius)` with:
+- a `celsius` **property** whose setter rejects values below absolute zero (−273.15) with `ValueError`, **including** in `__init__`;
+- a read-write `fahrenheit` property that converts both ways;
+- a class method `from_fahrenheit(f)` that returns an instance of whatever class it's called on.
+:::starter
+```python norun
+class Temperature:
+    def __init__(self, celsius):
+        pass
+```
+:::tests
+```python norun
+t = Temperature(25)
+assert t.celsius == 25 and abs(t.fahrenheit - 77.0) < 1e-9
+t.fahrenheit = 212
+assert abs(t.celsius - 100) < 1e-9
+assert abs(Temperature.from_fahrenheit(32).celsius) < 1e-9
+assert raises(ValueError, Temperature, -300)
+assert raises(ValueError, setattr, t, "celsius", -500)
+class Kelvinish(Temperature): pass
+assert type(Kelvinish.from_fahrenheit(50)) is Kelvinish
+```
+:::solution
+```python
+class Temperature:
+    ABSOLUTE_ZERO = -273.15
+
+    def __init__(self, celsius):
+        self.celsius = celsius                # goes through the setter: validated
+
+    @property
+    def celsius(self):
+        return self._celsius
+
+    @celsius.setter
+    def celsius(self, value):
+        if value < self.ABSOLUTE_ZERO:
+            raise ValueError(f"{value} is below absolute zero")
+        self._celsius = value
+
+    @property
+    def fahrenheit(self):
+        return self._celsius * 9 / 5 + 32
+
+    @fahrenheit.setter
+    def fahrenheit(self, value):
+        self.celsius = (value - 32) * 5 / 9   # reuse the validating setter
+
+    @classmethod
+    def from_fahrenheit(cls, f):
+        return cls((f - 32) * 5 / 9)
+
+t = Temperature.from_fahrenheit(98.6)
+print(round(t.celsius, 2), t.fahrenheit)
+```
+:::explain
+There's only **one** stored value (`_celsius`). Fahrenheit is computed, so the two can never disagree. Every write path (`__init__`, the `celsius` setter and the `fahrenheit` setter) funnels through the single validating setter. `cls(...)` in the class method makes subclasses build instances of themselves.
+:::complexity
+O(1).
+:::end
+
+:::program medium | Design underground system | LeetCode 1396 | https://leetcode.com/problems/design-underground-system/
+Track travel times: `check_in(id, station, t)`, `check_out(id, station, t)`, and `get_average_time(start, end)` returns the average time of all **completed** trips from `start` to `end`.
+:::starter
+```python norun
+class UndergroundSystem:
+    def __init__(self):
+        pass
+    def check_in(self, id, station_name, t):
+        pass
+    def check_out(self, id, station_name, t):
+        pass
+    def get_average_time(self, start_station, end_station):
+        pass
+```
+:::tests
+```python norun
+u = UndergroundSystem()
+u.check_in(45, "Leyton", 3); u.check_in(32, "Paradise", 8); u.check_in(27, "Leyton", 10)
+u.check_out(45, "Waterloo", 15); u.check_out(27, "Waterloo", 20); u.check_out(32, "Cambridge", 22)
+assert u.get_average_time("Paradise", "Cambridge") == 14.0
+assert u.get_average_time("Leyton", "Waterloo") == 11.0
+u.check_in(10, "Leyton", 24)
+assert u.get_average_time("Leyton", "Waterloo") == 11.0
+u.check_out(10, "Waterloo", 38)
+assert u.get_average_time("Leyton", "Waterloo") == 12.0
+```
+:::hint
+You need two dicts: `active[id] = (station, t)` for riders still travelling, and `stats[(start, end)] = [total_time, trips]`. Tuples make great composite keys.
+:::solution
+```python
+from collections import defaultdict
+
+class UndergroundSystem:
+    def __init__(self):
+        self.active = {}                              # id -> (start station, time)
+        self.stats = defaultdict(lambda: [0, 0])      # (start, end) -> [total time, trips]
+
+    def check_in(self, id, station_name, t):
+        self.active[id] = (station_name, t)
+
+    def check_out(self, id, station_name, t):
+        start, t0 = self.active.pop(id)
+        s = self.stats[(start, station_name)]
+        s[0] += t - t0
+        s[1] += 1
+
+    def get_average_time(self, start_station, end_station):
+        total, trips = self.stats[(start_station, end_station)]
+        return total / trips
+
+u = UndergroundSystem()
+u.check_in(1, "A", 0); u.check_out(1, "B", 10)
+u.check_in(2, "A", 5); u.check_out(2, "B", 25)
+print(u.get_average_time("A", "B"))
+```
+:::explain
+Storing **running totals** (sum and count) instead of every trip makes the average O(1) and the memory proportional to the number of routes, not trips. The object's two dicts are its private state, and the three methods are the only way to change it: that's encapsulation. `pop` removes the rider from `active` as they leave.
+:::complexity
+O(1) per operation.
+:::end
+
+:::program medium | Fraction with alternative constructors | Real-world task
+Write `Fraction(num, den)` that always stores the **reduced** form with a positive denominator (raise `ZeroDivisionError` for den = 0). Add:
+- `@classmethod from_string("3/4")` and `from_float(0.75, max_den=1000)`;
+- `@staticmethod gcd(a, b)` (your own Euclid, not `math.gcd`);
+- a `value` property (float) and `__repr__` like `Fraction(3, 4)`.
+:::starter
+```python norun
+class Fraction:
+    def __init__(self, num, den=1):
+        pass
+```
+:::tests
+```python norun
+f = Fraction(6, -8)
+assert (f.num, f.den) == (-3, 4) and repr(f) == "Fraction(-3, 4)"
+assert Fraction.from_string(" 10/4 ").num == 5 and Fraction.from_string("10/4").den == 2
+assert (Fraction.from_float(0.75).num, Fraction.from_float(0.75).den) == (3, 4)
+assert (Fraction.from_float(0.333333).num, Fraction.from_float(0.333333).den) == (1, 3)
+assert Fraction.gcd(48, 18) == 6 and Fraction.gcd(0, 5) == 5
+assert Fraction(1, 4).value == 0.25
+assert raises(ZeroDivisionError, Fraction, 1, 0)
+```
+:::hint
+For `from_float`, try every denominator `d` from 1 to `max_den`, take `n = round(x * d)`, and keep the closest `n/d`. Stop early on an exact match.
+:::solution
+```python
+class Fraction:
+    def __init__(self, num, den=1):
+        if den == 0:
+            raise ZeroDivisionError("denominator cannot be zero")
+        if den < 0:
+            num, den = -num, -den
+        g = self.gcd(abs(num), den)
+        self.num, self.den = num // g, den // g
+
+    @staticmethod
+    def gcd(a, b):
+        while b:
+            a, b = b, a % b              # Euclid's algorithm
+        return a or 1
+
+    @classmethod
+    def from_string(cls, s):
+        num, den = s.strip().split("/")
+        return cls(int(num), int(den))
+
+    @classmethod
+    def from_float(cls, x, max_den=1000):
+        best = None
+        for d in range(1, max_den + 1):
+            n = round(x * d)
+            err = abs(x - n / d)
+            if best is None or err < best[0]:
+                best = (err, n, d)
+                if err < 1e-12:
+                    break
+        return cls(best[1], best[2])
+
+    @property
+    def value(self):
+        return self.num / self.den
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self.num}, {self.den})"
+
+print(Fraction(6, -8), Fraction.from_string("10/4"), Fraction.from_float(0.333333), Fraction(1, 8).value)
+```
+:::explain
+This shows all three kinds of method in one class. **Instance methods and properties** work with one fraction's data. **Class methods** are alternative constructors that parse different input formats and finish with `cls(...)`, so they share the normalisation in `__init__`. The **static method** `gcd` needs no instance or class, but logically belongs here. Normalising once in `__init__` (sign and reduction) makes equality and hashing easy later.
+:::complexity
+`from_float` is O(max_den). The rest is O(log n).
+:::end
+
+:::program hard | Snapshot array | LeetCode 1146 | https://leetcode.com/problems/snapshot-array/
+`SnapshotArray(length)` starts with all zeros. `set(index, val)`, `snap()` returns a snapshot id (0, 1, 2…), and `get(index, snap_id)` returns the value at `index` **at the time of that snapshot**. Snapshots must not copy the whole array.
+:::starter
+```python norun
+class SnapshotArray:
+    def __init__(self, length):
+        pass
+    def set(self, index, val):
+        pass
+    def snap(self):
+        pass
+    def get(self, index, snap_id):
+        pass
+```
+:::tests
+```python norun
+s = SnapshotArray(3)
+s.set(0, 5)
+assert s.snap() == 0
+s.set(0, 6)
+assert s.get(0, 0) == 5
+assert s.snap() == 1 and s.get(0, 1) == 6 and s.get(1, 1) == 0
+big = SnapshotArray(100000)
+for i in range(1000): big.snap()
+big.set(7, 42)
+assert big.snap() == 1000 and big.get(7, 999) == 0 and big.get(7, 1000) == 42
+s.set(2, 1); s.set(2, 2); s.snap()
+assert s.get(2, 2) == 2 and s.get(2, 0) == 0
+```
+:::hint
+For each index, store its **history** as a list of `(snap_id, value)` pairs, appending only on `set`. `get` binary-searches that history for the last entry with `snap_id ≤` the requested one (`bisect`).
+:::solution
+```python
+import bisect
+
+class SnapshotArray:
+    def __init__(self, length):
+        self.history = [[(-1, 0)] for _ in range(length)]   # each index: list of (snap_id, value)
+        self.snap_id = 0
+
+    def set(self, index, val):
+        h = self.history[index]
+        if h[-1][0] == self.snap_id:
+            h[-1] = (self.snap_id, val)                       # overwrite within the same snapshot
+        else:
+            h.append((self.snap_id, val))
+
+    def snap(self):
+        self.snap_id += 1
+        return self.snap_id - 1
+
+    def get(self, index, snap_id):
+        h = self.history[index]
+        i = bisect.bisect_right(h, (snap_id, float("inf"))) - 1
+        return h[i][1]
+
+s = SnapshotArray(3)
+s.set(0, 5); print("snap", s.snap()); s.set(0, 6)
+print(s.get(0, 0), s.get(0, 1), s.history[0])
+```
+:::explain
+Copying 100,000 values on every `snap()` would be O(n) per snapshot. Instead, each index keeps a **versioned history** that changes only when that index is written. Snapshot ids grow, so each history list is sorted, and `bisect_right` with the probe `(snap_id, inf)` finds the latest version at or before the snapshot. This is the same copy-on-write / MVCC idea used by databases and git.
+:::complexity
+`set`/`snap` O(1), `get` O(log versions), and memory proportional to the number of sets.
 :::end
