@@ -25,8 +25,10 @@ for f in files:
         line = src[: m.start()].count("\n") + 1
         total += 1
         with tempfile.TemporaryDirectory() as d:
+            script = pathlib.Path(d) / "snippet.py"
+            script.write_text(code, encoding="utf-8")
             try:
-                r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30, cwd=d, env=env)
+                r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30, cwd=d, env=env)
                 rc, err = r.returncode, r.stderr
             except subprocess.TimeoutExpired:
                 rc, err = 99, "TIMEOUT"

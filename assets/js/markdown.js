@@ -47,8 +47,10 @@
     } catch (e) { html = esc(text); }
     const idx = CODE_REGISTRY.push({ code: text, flags }) - 1;
     const isPy = lang === "python" || lang === "py";
-    const runnable = isPy && !flags.includes("norun");
-    const label = flags.includes("error") ? "python · raises an error (on purpose)" : flags.includes("plot") ? "python · plot" : lang;
+    const runnable = isPy && !flags.includes("norun") && !flags.includes("local");
+    const label = flags.includes("error") ? "python · raises an error (on purpose)"
+      : flags.includes("plot") ? "python · plot"
+      : flags.includes("local") ? "python · run on your machine (threads/processes don't run in the browser)" : lang;
     return `<div class="code${flags.includes("error") ? " error" : ""}" data-idx="${idx}">
       <div class="bar"><span>${label}</span><span class="sp"></span>
         <button class="copy-btn" data-act="copy">Copy</button>
