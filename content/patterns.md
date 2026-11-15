@@ -285,6 +285,61 @@ print(pow(2, 100, 10**9 + 7), math.comb(10, 3), math.factorial(10))
 | Trapping Rain Water | two pointers / prefix max |
 | Longest Palindromic Substring | expand around centre |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+nums = [1, 2, 3, 4, 5]
+window = sum(nums[:3])
+best = window
+for i in range(3, len(nums)):
+    window += nums[i] - nums[i - 3]
+    best = max(best, window)
+print(best)
+```
+What prints?
+- [ ] `6`
+- [ ] `9`
+- [x] `12`
+This is a fixed-size sliding window of width 3. The sums go 6 → 9 → 12: each step adds the new right element and subtracts the one leaving on the left, so every window costs O(1) instead of O(k).
+:::
+
+:::quiz
+```python
+xs = [1, 2, 4, 7, 11]
+i, j = 0, len(xs) - 1
+steps = 0
+while i < j:
+    steps += 1
+    s = xs[i] + xs[j]
+    if s == 9: break
+    if s < 9: i += 1
+    else: j -= 1
+print(i, j, steps)
+```
+What prints?
+- [x] `1 3 3`
+- [ ] `2 3 2`
+- [ ] `1 3 2`
+1+11=12 > 9 so j moves to 3. Then 1+7=8 < 9 so i moves to 1. Then 2+7=9: found at (1, 3) after 3 steps. Each step discards a whole row or column of the pair grid.
+:::
+
+:::quiz
+```python
+from itertools import accumulate
+nums = [3, 1, 4, 1, 5]
+P = [0, *accumulate(nums)]
+print(P[4] - P[1])
+```
+What prints?
+- [ ] `9`
+- [x] `6`
+- [ ] `10`
+`P = [0, 3, 4, 8, 9, 14]`, and `P[4] - P[1]` is the sum of `nums[1:4]` = 1+4+1 = 6. The leading 0 makes "sum of `nums[i:j]` = `P[j] - P[i]`" work with no special case.
+:::
+
 ## Practice problems
 
 :::problem basic | Valid palindrome II | two pointers + one skip
@@ -503,4 +558,176 @@ print(count_range_sum([-2, 5, -1], -2, 2))
 ```
 :::explain
 Subarray sums are differences of prefix sums. During merge sort over the prefix array, for each element of the sorted left half, the valid right-half partners form a **contiguous block** (both halves are sorted), found with two monotonically advancing pointers. Counting cross-half pairs takes O(n) per level, so O(n log n) overall. This pattern ("prefix sums + divide and conquer") also solves inversion-style counting problems. (`sorted` on the merged slice keeps the code short. A manual merge would remove the extra log factor.)
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Squares of a sorted array | LeetCode 977 | https://leetcode.com/problems/squares-of-a-sorted-array/
+`nums` is sorted (and may contain negatives). Return the squares in sorted order in **O(n)**: no `sorted()`.
+:::starter
+```python norun
+def sorted_squares(nums):
+    pass
+```
+:::tests
+```python norun
+assert sorted_squares([-4, -1, 0, 3, 10]) == [0, 1, 9, 16, 100]
+assert sorted_squares([-7, -3, 2, 3, 11]) == [4, 9, 9, 49, 121]
+assert sorted_squares([-5, -2]) == [4, 25]
+assert sorted_squares([1]) == [1] and sorted_squares([]) == []
+import random
+xs = sorted(random.randint(-100, 100) for _ in range(200))
+assert sorted_squares(xs) == sorted(x * x for x in xs)
+```
+:::hint
+The **largest** square is always at one of the two ends. Use two pointers moving inward and fill the result from the back.
+:::solution
+```python
+def sorted_squares(nums):
+    out = [0] * len(nums)
+    lo, hi = 0, len(nums) - 1
+    for k in range(len(nums) - 1, -1, -1):    # fill from the largest down
+        if abs(nums[lo]) > abs(nums[hi]):
+            out[k] = nums[lo] ** 2
+            lo += 1
+        else:
+            out[k] = nums[hi] ** 2
+            hi -= 1
+    return out
+
+print(sorted_squares([-4, -1, 0, 3, 10]))
+```
+:::explain
+Squaring folds the number line at 0, so the squares are big at both ends and small in the middle. The two ends are the only candidates for "the biggest remaining", so we compare them, take the winner, and move that pointer inward. This is the **merge step** of merge sort, run on the two halves (negatives reversed, positives).
+:::complexity
+O(n) time, O(n) output.
+:::end
+
+:::program basic | Is subsequence | LeetCode 392 | https://leetcode.com/problems/is-subsequence/
+Is `s` a subsequence of `t` (meaning you can delete characters from `t` to get `s`, keeping the order)?
+:::starter
+```python norun
+def is_subsequence(s, t):
+    pass
+```
+:::tests
+```python norun
+assert is_subsequence("abc", "ahbgdc") is True
+assert is_subsequence("axc", "ahbgdc") is False
+assert is_subsequence("", "abc") is True
+assert is_subsequence("abc", "") is False
+assert is_subsequence("aab", "ab") is False
+```
+:::solution
+```python
+def is_subsequence(s, t):
+    i = 0
+    for ch in t:
+        if i < len(s) and s[i] == ch:   # greedy: match as early as possible
+            i += 1
+    return i == len(s)
+
+def is_subsequence_iter(s, t):          # the slick version: `in` consumes the iterator
+    it = iter(t)
+    return all(ch in it for ch in s)
+
+print(is_subsequence("abc", "ahbgdc"), is_subsequence_iter("axc", "ahbgdc"))
+```
+:::explain
+**Greedy two pointers**: matching each character of `s` at its earliest possible position in `t` never hurts, because it leaves the most of `t` for the rest. The iterator trick works because `ch in it` advances `it` until it finds `ch` (or runs out), and each search resumes where the last one stopped.
+:::complexity
+O(len(t)) time, O(1) space.
+:::end
+
+:::program medium | Permutation in string | LeetCode 567 | https://leetcode.com/problems/permutation-in-string/
+Does `s2` contain some **permutation** of `s1` as a contiguous substring?
+:::starter
+```python norun
+def check_inclusion(s1, s2):
+    pass
+```
+:::tests
+```python norun
+assert check_inclusion("ab", "eidbaooo") is True
+assert check_inclusion("ab", "eidboaoo") is False
+assert check_inclusion("adc", "dcda") is True
+assert check_inclusion("a", "a") is True
+assert check_inclusion("abc", "ab") is False
+assert check_inclusion("hello", "ooolleoooleh") is False
+```
+:::hint
+Use a **fixed-size window** of length `len(s1)` sliding over `s2`, keeping letter counts for it. Compare the window's counts with `s1`'s counts, updating only the letter that enters and the one that leaves.
+:::solution
+```python
+from collections import Counter
+
+def check_inclusion(s1, s2):
+    k = len(s1)
+    if k > len(s2):
+        return False
+    need, window = Counter(s1), Counter(s2[:k])
+    if window == need:
+        return True
+    for i in range(k, len(s2)):
+        window[s2[i]] += 1                 # the char entering
+        window[s2[i - k]] -= 1             # the char leaving
+        if window == need:                 # Counter == ignores zero counts (3.10+)
+            return True
+    return False
+
+print(check_inclusion("ab", "eidbaooo"), check_inclusion("ab", "eidboaoo"))
+```
+:::explain
+"A permutation of s1" means "the same letter counts as s1". Recounting each window costs O(k), but **sliding** updates only 2 counts per step. Comparing two Counters costs O(alphabet) = O(26), so the whole thing is O(n). An even tighter version tracks a single `matches` integer (how many letters currently have equal counts) to make each step O(1).
+:::complexity
+O(n · 26) time, O(26) space.
+:::end
+
+:::program hard | Max points on a line | LeetCode 149 | https://leetcode.com/problems/max-points-on-a-line/
+Given integer points (all distinct), return the maximum number lying on one straight line. Avoid floating-point slopes.
+:::starter
+```python norun
+def max_points(points):
+    pass
+```
+:::tests
+```python norun
+assert max_points([[1, 1], [2, 2], [3, 3]]) == 3
+assert max_points([[1, 1], [3, 2], [5, 3], [4, 1], [2, 3], [1, 4]]) == 4
+assert max_points([[0, 0]]) == 1
+assert max_points([[0, 0], [0, 5], [0, -3], [1, 1]]) == 3
+assert max_points([[0, 0], [94911151, 94911150], [94911152, 94911151]]) == 2
+```
+:::hint
+Fix an anchor point and **hash the slope** to every other point. Represent a slope as a reduced fraction `(dy, dx)` using `gcd`, with a sign rule so that `(1, -2)` and `(-1, 2)` count as the same.
+:::solution
+```python
+from math import gcd
+from collections import Counter
+
+def max_points(points):
+    if len(points) <= 2:
+        return len(points)
+    best = 0
+    for i, (x1, y1) in enumerate(points):
+        slopes = Counter()
+        for x2, y2 in points[i + 1:]:
+            dx, dy = x2 - x1, y2 - y1
+            g = gcd(dx, dy)
+            dx, dy = dx // g, dy // g
+            if dx < 0 or (dx == 0 and dy < 0):   # normalise the direction
+                dx, dy = -dx, -dy
+            slopes[(dy, dx)] += 1
+        if slopes:
+            best = max(best, max(slopes.values()) + 1)   # +1 for the anchor
+    return best
+
+print(max_points([[1, 1], [3, 2], [5, 3], [4, 1], [2, 3], [1, 4]]))
+```
+:::explain
+All points on a line through the anchor share one slope, so grouping by slope in a hash map counts them. **Floats are a trap**: the last test has two slopes that differ by about 10⁻¹⁶ and would collide as floats. A reduced integer fraction is exact, and `gcd` handles vertical lines (`dx = 0` becomes `(1, 0)`) without a division-by-zero special case. Only pairs `j > i` are needed, since lines through earlier anchors were already counted.
+:::complexity
+O(n² log C) time (the gcd), O(n) space per anchor.
 :::end

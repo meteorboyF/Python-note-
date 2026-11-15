@@ -280,6 +280,43 @@ print(sorted([3, 1, 2], key=functools.cmp_to_key(cmp)))
 | 9 | Recursion depth in naive quicksort | randomise, or recurse on the smaller side |
 | 10 | Re-sorting inside loops | sort once / heap / bisect |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+import bisect
+xs = [1, 3, 3, 3, 7]
+print(bisect.bisect_left(xs, 3), bisect.bisect_right(xs, 3), bisect.bisect_left(xs, 4), bisect.bisect_left(xs, 99))
+```
+What prints?
+- [x] `1 4 4 5`
+- [ ] `1 3 3 4`
+- [ ] `0 4 4 IndexError`
+`bisect_left` returns the first index where the value could be inserted (the first 3 is at 1), and `bisect_right` returns the index just after the last equal element (4). For a missing value, both give the insertion point, which can be `len(xs)`.
+:::
+
+:::quiz
+```python norun
+data = [("b", 2), ("a", 1), ("c", 2), ("d", 1)]
+print(sorted(data, key=lambda t: t[1]))
+```
+What prints?
+- [x] `[('a', 1), ('d', 1), ('b', 2), ('c', 2)]`
+- [ ] `[('a', 1), ('d', 1), ('c', 2), ('b', 2)]`
+- [ ] `[('d', 1), ('a', 1), ('b', 2), ('c', 2)]`
+Python's sort is **stable**: elements with equal keys keep their original relative order (`a` before `d`, `b` before `c`). That's what makes multi-pass sorting work.
+:::
+
+:::quiz
+Which sort is stable **and** guarantees O(n log n) in the worst case?
+- [ ] Quicksort
+- [ ] Heapsort
+- [x] Merge sort
+Quicksort can degrade to O(n²) and isn't stable. Heapsort is O(n log n) but not stable. Merge sort is both, which is why Python's Timsort is built on merging runs.
+:::
+
 ## Practice problems
 
 :::problem basic | Search insert position | lower bound
@@ -504,4 +541,168 @@ print(split_array([7, 2, 5, 10, 8], 2), split_array([1, 2, 3, 4, 5], 2), split_a
 ```
 :::explain
 "Is a maximum part-sum of `cap` achievable with ≤ k parts?" is **monotonic**: if `cap` works, any larger cap works too. A greedy check (fill each part until it would overflow) answers it in O(n), and binary search over `cap` gives O(n log(sum)). This "binary search the answer + greedy feasibility check" template solves ship-capacity, painters-partition and many scheduling problems.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Binary search | LeetCode 704 | https://leetcode.com/problems/binary-search/
+Return the index of `target` in a sorted list, or −1 if it isn't there. Write the loop yourself: no `bisect`, no `.index`.
+:::starter
+```python norun
+def search(nums, target):
+    pass
+```
+:::tests
+```python norun
+assert search([-1, 0, 3, 5, 9, 12], 9) == 4
+assert search([-1, 0, 3, 5, 9, 12], 2) == -1
+assert search([5], 5) == 0 and search([5], 4) == -1 and search([], 1) == -1
+xs = list(range(0, 2_000_000, 2))
+assert search(xs, 1_999_998) == 999_999 and search(xs, 7) == -1
+```
+:::solution
+```python
+def search(nums, target):
+    lo, hi = 0, len(nums) - 1              # closed interval [lo, hi]
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if nums[mid] == target:
+            return mid
+        if nums[mid] < target:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return -1
+
+print(search([-1, 0, 3, 5, 9, 12], 9), search([-1, 0, 3, 5, 9, 12], 2))
+```
+:::explain
+Each comparison halves the remaining interval, so a million elements need at most about 20 steps. The **closed-interval** template (`lo <= hi`, `mid ± 1`) always shrinks the range, so it can't loop forever. Python ints never overflow, so `(lo + hi) // 2` is safe (in C/Java you'd write `lo + (hi - lo) / 2`).
+:::trace
+`[-1, 0, 3, 5, 9, 12]`, target 9:
+| lo | hi | mid | nums[mid] | action |
+|---|---|---|---|---|
+| 0 | 5 | 2 | 3 | lo = 3 |
+| 3 | 5 | 4 | 9 | **found → 4** |
+:::complexity
+O(log n).
+:::end
+
+:::program basic | Sqrt(x) | LeetCode 69 | https://leetcode.com/problems/sqrtx/
+Return ⌊√x⌋ for a non-negative int **without** `**`, `math.sqrt` or `isqrt`. Use binary search on the answer.
+:::starter
+```python norun
+def my_sqrt(x):
+    pass
+```
+:::tests
+```python norun
+assert my_sqrt(4) == 2 and my_sqrt(8) == 2 and my_sqrt(0) == 0 and my_sqrt(1) == 1
+assert my_sqrt(2147395599) == 46339
+import math
+assert all(my_sqrt(n) == math.isqrt(n) for n in range(2000))
+assert my_sqrt(10**30) == 10**15
+```
+:::solution
+```python
+def my_sqrt(x):
+    lo, hi = 0, x + 1                   # find the first m with m*m > x, in [lo, hi)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if mid * mid > x:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo - 1
+
+print(my_sqrt(8), my_sqrt(10**30))
+```
+:::explain
+"Is m² > x?" is False, False, …, True, True as m grows: a **monotonic predicate**, so binary search finds the first True. The answer is the number just before it. This "binary search on the answer" template works whenever feasibility is monotonic. Python's big ints handle `10**30` exactly, where a float-based `int(x ** 0.5)` could be off by one.
+:::complexity
+O(log x).
+:::end
+
+:::program medium | Find peak element | LeetCode 162 | https://leetcode.com/problems/find-peak-element/
+A peak is strictly greater than its neighbours (`nums[-1]` and `nums[n]` count as −∞). Return the index of **any** peak in O(log n). Adjacent elements are never equal.
+:::starter
+```python norun
+def find_peak_element(nums):
+    pass
+```
+:::tests
+```python norun
+def is_peak(nums, i):
+    left = nums[i - 1] if i > 0 else float("-inf")
+    right = nums[i + 1] if i < len(nums) - 1 else float("-inf")
+    return nums[i] > left and nums[i] > right
+for case in ([1, 2, 3, 1], [1, 2, 1, 3, 5, 6, 4], [1], [3, 2, 1], [1, 2, 3]):
+    assert is_peak(case, find_peak_element(case)), case
+```
+:::hint
+Compare `nums[mid]` with `nums[mid + 1]`. If the right neighbour is bigger, a peak must exist on the right (the values rise, and the far end is −∞). Otherwise there's one at `mid` or to its left.
+:::solution
+```python
+def find_peak_element(nums):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] < nums[mid + 1]:
+            lo = mid + 1                # uphill to the right: a peak lies right
+        else:
+            hi = mid                    # downhill: mid itself may be the peak
+    return lo
+
+print(find_peak_element([1, 2, 1, 3, 5, 6, 4]))
+```
+:::explain
+Binary search doesn't need sorted data, only a rule that **discards half the space safely**. If we're going uphill to the right, following it must reach a peak, because the sequence eventually has to come down to −∞. The tests accept any peak, which is why they check the property rather than a specific index.
+:::complexity
+O(log n).
+:::end
+
+:::program hard | Find minimum in rotated sorted array II | LeetCode 154 | https://leetcode.com/problems/find-minimum-in-rotated-sorted-array-ii/
+A sorted array (which **may contain duplicates**) was rotated. Return its minimum. With duplicates, the worst case can't beat O(n), but it should be O(log n) when the values are distinct.
+:::starter
+```python norun
+def find_min(nums):
+    pass
+```
+:::tests
+```python norun
+assert find_min([1, 3, 5]) == 1
+assert find_min([2, 2, 2, 0, 1]) == 0
+assert find_min([3, 3, 1, 3]) == 1
+assert find_min([1, 1, 1, 1]) == 1
+assert find_min([10, 1, 10, 10, 10]) == 1
+import random
+for _ in range(500):
+    xs = sorted(random.randint(0, 5) for _ in range(random.randint(1, 15)))
+    k = random.randrange(len(xs))
+    assert find_min(xs[k:] + xs[:k]) == min(xs)
+```
+:::hint
+Compare `nums[mid]` with `nums[hi]`. If it's smaller, the minimum is at mid or to its left. If it's larger, the minimum is to the right. If they're **equal**, you can't tell which side, but `hi` can safely be discarded (`hi -= 1`) because `mid` holds the same value.
+:::solution
+```python
+def find_min(nums):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] < nums[hi]:
+            hi = mid
+        elif nums[mid] > nums[hi]:
+            lo = mid + 1
+        else:
+            hi -= 1                  # a duplicate: shrink by one, safely
+    return nums[lo]
+
+print(find_min([2, 2, 2, 0, 1]), find_min([10, 1, 10, 10, 10]))
+```
+:::explain
+Without duplicates, comparing with the right end always tells us which half is sorted, which gives O(log n). Duplicates create ambiguity (`[10, 1, 10, 10, 10]`: is the dip left or right of mid?). The safe move is dropping just `hi`: since `nums[mid] == nums[hi]`, we never lose the minimum's value. The 500-case random rotation test checks exactly this kind of edge case.
+:::complexity
+O(log n) average, O(n) worst case (all equal values).
 :::end

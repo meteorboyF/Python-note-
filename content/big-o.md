@@ -238,6 +238,52 @@ Doubling n roughly doubles the list time (O(n)) and leaves the set time flat (O(
 | 9 | Exponential recursion without memoisation | `@cache` |
 | 10 | Micro-optimising instead of changing the algorithm | fix the complexity class first |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+def f(n):
+    total = 0
+    i = 1
+    while i < n:
+        for j in range(n):
+            total += 1
+        i *= 2
+    return total
+```
+What is the time complexity of `f(n)`?
+- [ ] O(n²)
+- [x] O(n log n)
+- [ ] O(log n)
+The outer loop doubles `i`, so it runs about log₂ n times. Each pass runs the inner loop n times. That multiplies to n · log n.
+:::
+
+:::quiz
+Which of these is **O(n)**, not O(1)?
+- [ ] `d[key]` for a dict
+- [ ] `xs.append(x)` (amortised)
+- [x] `x in xs` for a list
+- [ ] `len(xs)`
+Membership on a **list** scans the elements, which is O(n). Dict lookup is O(1) on average, append is O(1) amortised, and `len` is O(1) because the size is stored.
+:::
+
+:::quiz
+```python norun
+def g(xs):
+    if len(xs) <= 1:
+        return 1
+    mid = len(xs) // 2
+    return g(xs[:mid]) + g(xs[mid:])
+```
+What is the time complexity, counting the slice copies?
+- [ ] O(log n)
+- [ ] O(n)
+- [x] O(n log n)
+There are 2 recursive calls on halves, plus O(n) work per level to copy the slices: T(n) = 2T(n/2) + O(n), which is the merge-sort recurrence, so O(n log n). Without the slicing (passing indices instead), it would be O(n).
+:::
+
 ## Practice problems
 
 :::problem basic | Classify the complexity | reading code
@@ -422,4 +468,170 @@ print(f"pushes={pushes}  total moves={q.moves}  ratio={q.moves / pushes:.2f}  wo
 ```
 :::explain
 Each element is touched at most 3 times: pushed onto `inbox`, moved to `outbox`, popped. So the total work is ≤ 3 × the number of pushes, which is O(1) amortised per operation, even though the worst **single** pop moved thousands of elements. In the **potential method**, each push "prepays" for its future move, which is the formal version of this accounting argument.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Contains duplicate | LeetCode 217 | https://leetcode.com/problems/contains-duplicate/
+Return True if any value appears at least twice. Write the O(n²) brute force **and** an O(n) version, and make sure the fast one handles 10⁵ elements instantly.
+:::starter
+```python norun
+def contains_duplicate(nums):
+    pass
+```
+:::tests
+```python norun
+assert contains_duplicate([1, 2, 3, 1]) is True
+assert contains_duplicate([1, 2, 3, 4]) is False
+assert contains_duplicate([]) is False
+assert contains_duplicate(list(range(100000))) is False
+assert contains_duplicate(list(range(100000)) + [5]) is True
+```
+:::solution
+```python
+def contains_duplicate_slow(nums):          # O(n^2): compares every pair
+    return any(nums[i] == nums[j] for i in range(len(nums)) for j in range(i + 1, len(nums)))
+
+def contains_duplicate(nums):               # O(n): set membership is O(1)
+    seen = set()
+    for x in nums:
+        if x in seen:
+            return True
+        seen.add(x)
+    return False
+
+print(contains_duplicate_slow([1, 2, 3, 1]), contains_duplicate(list(range(100000))))
+```
+:::explain
+For 10⁵ elements, the brute force does about 5·10⁹ comparisons (minutes), while the set version does 10⁵ O(1) checks (milliseconds). The trade-off is **time vs memory**: O(n) extra space for the set. Sorting first gives O(n log n) time with O(1) extra space, which is a third valid point on that curve.
+:::complexity
+O(n) time, O(n) space.
+:::end
+
+:::program basic | Find all numbers disappeared | LeetCode 448 | https://leetcode.com/problems/find-all-numbers-disappeared-in-an-array/
+`nums` has n values, each in 1..n. Return the numbers in 1..n that are missing, in O(n) time and **O(1) extra space** (the output list doesn't count).
+:::starter
+```python norun
+def find_disappeared_numbers(nums):
+    pass
+```
+:::tests
+```python norun
+assert find_disappeared_numbers([4, 3, 2, 7, 8, 2, 3, 1]) == [5, 6]
+assert find_disappeared_numbers([1, 1]) == [2]
+assert find_disappeared_numbers([1, 2, 3]) == []
+assert find_disappeared_numbers([2, 2, 2]) == [1, 3]
+```
+:::hint
+Use the array itself as the "seen" table: for each value v, make `nums[abs(v) - 1]` **negative**. Afterwards, the indices still holding positive values are the missing numbers.
+:::solution
+```python
+def find_disappeared_numbers(nums):
+    for v in nums:
+        i = abs(v) - 1
+        nums[i] = -abs(nums[i])          # mark "i+1 was seen" with the sign bit
+    return [i + 1 for i, v in enumerate(nums) if v > 0]
+
+print(find_disappeared_numbers([4, 3, 2, 7, 8, 2, 3, 1]))
+```
+:::explain
+The usual "seen" set would cost O(n) memory. Since the values are exactly in the range of valid indices, the **sign** of `nums[v-1]` can serve as the flag, and `abs()` recovers the original value when it's read later. Reusing the input as scratch space is a classic way to trade the reusability of the input for space.
+:::complexity
+O(n) time, O(1) extra space.
+:::end
+
+:::program medium | Subarray sums divisible by K | LeetCode 974 | https://leetcode.com/problems/subarray-sums-divisible-by-k/
+Count the contiguous subarrays whose sum is divisible by `k`. The brute force is O(n²) (or O(n³) naively), so get to **O(n)**.
+:::starter
+```python norun
+def subarrays_div_by_k(nums, k):
+    pass
+```
+:::tests
+```python norun
+assert subarrays_div_by_k([4, 5, 0, -2, -3, 1], 5) == 7
+assert subarrays_div_by_k([5], 9) == 0
+assert subarrays_div_by_k([-1, 2, 9], 2) == 2
+assert subarrays_div_by_k([0, 0, 0], 3) == 6
+import random
+xs = [random.randint(-20, 20) for _ in range(150)]
+assert subarrays_div_by_k(xs, 7) == sum(sum(xs[i:j]) % 7 == 0 for i in range(150) for j in range(i + 1, 151))
+```
+:::hint
+`sum(i..j)` is divisible by k exactly when the prefix sums `P[j+1]` and `P[i]` leave the **same remainder** mod k. Count the remainders as you go.
+:::solution
+```python
+from collections import Counter
+
+def subarrays_div_by_k(nums, k):
+    seen = Counter({0: 1})              # the empty prefix has remainder 0
+    prefix = count = 0
+    for x in nums:
+        prefix = (prefix + x) % k       # Python's % is non-negative for k > 0
+        count += seen[prefix]           # pair with every earlier prefix with the same remainder
+        seen[prefix] += 1
+    return count
+
+print(subarrays_div_by_k([4, 5, 0, -2, -3, 1], 5))
+```
+:::explain
+Brute force checks O(n²) subarrays. The insight: two prefixes with equal remainders differ by a multiple of k, so counting **pairs of equal remainders** counts the subarrays in one pass. Python's `%` always returns a non-negative result for positive k, so negative numbers just work (in Java or C you'd have to fix negative remainders). The random test compares against brute force on 150 elements.
+:::complexity
+O(n) time, O(k) space.
+:::end
+
+:::program hard | Count of smaller numbers after self | LeetCode 315 | https://leetcode.com/problems/count-of-smaller-numbers-after-self/
+For each `nums[i]`, count how many elements **to its right** are smaller. The brute force is O(n²), which is too slow for 10⁵ elements, so aim for O(n log n).
+:::starter
+```python norun
+def count_smaller(nums):
+    pass
+```
+:::tests
+```python norun
+assert count_smaller([5, 2, 6, 1]) == [2, 1, 1, 0]
+assert count_smaller([-1]) == [0]
+assert count_smaller([-1, -1]) == [0, 0]
+import random
+xs = [random.randint(-50, 50) for _ in range(300)]
+assert count_smaller(xs) == [sum(y < x for y in xs[i + 1:]) for i, x in enumerate(xs)]
+big = list(range(20000, 0, -1))
+assert count_smaller(big)[:3] == [19999, 19998, 19997]
+```
+:::hint
+Walk from **right to left**, keeping the values seen so far in a sorted list. `bisect_left` gives how many seen values are smaller. For a true O(n log n), use a **Fenwick tree** (binary indexed tree) over the value ranks instead of a list.
+:::solution
+```python
+def count_smaller(nums):
+    ranks = {v: i + 1 for i, v in enumerate(sorted(set(nums)))}   # compress values to 1..m
+    m = len(ranks)
+    tree = [0] * (m + 1)                       # Fenwick tree of counts per rank
+
+    def add(i):
+        while i <= m:
+            tree[i] += 1
+            i += i & -i                        # jump to the next responsible node
+
+    def prefix(i):                             # how many seen values have rank <= i
+        s = 0
+        while i > 0:
+            s += tree[i]
+            i -= i & -i
+        return s
+
+    out = []
+    for v in reversed(nums):
+        r = ranks[v]
+        out.append(prefix(r - 1))              # strictly smaller ranks
+        add(r)
+    return out[::-1]
+
+print(count_smaller([5, 2, 6, 1]))
+```
+:::explain
+**Coordinate compression** maps the values to ranks 1..m. The **Fenwick tree** stores counts so that both "add one at rank r" and "count ranks ≤ r" take O(log m), using the `i & -i` lowest-set-bit trick from the bits chapter. Scanning from the right means the tree contains exactly the elements after the current one. A `bisect.insort` version is simpler, but its inserts are O(n) each, making it O(n²) worst case: a nice illustration of how the data structure choice sets the complexity.
+:::complexity
+O(n log n) time, O(n) space.
 :::end

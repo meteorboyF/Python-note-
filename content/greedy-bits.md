@@ -217,6 +217,41 @@ print(reverse_bits32(0b1011), bin(reverse_bits32(0b1011)))
 | 9 | Bitmask DP with n too large (2ⁿ) | n ≤ ~20 |
 | 10 | Off-by-one in bit positions (0-indexed from the right) | write out the binary |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+print(5 & 3, 5 | 3, 5 ^ 3, ~5, 5 << 2, -9 >> 1)
+```
+What prints?
+- [x] `1 7 6 -6 20 -5`
+- [ ] `1 7 6 -6 20 -4`
+- [ ] `1 7 6 4294967290 20 -5`
+101 & 011 = 001, | = 111, ^ = 110. `~x == -x - 1` in Python (arbitrary-precision two's complement), and `>>` floors, so −9 >> 1 = ⌊−4.5⌋ = −5.
+:::
+
+:::quiz
+```python
+n = 0b101100
+print(n & (n - 1), n & -n, bin(n).count("1"))
+```
+What prints?
+- [ ] `44 4 3`
+- [x] `40 4 3`
+- [ ] `40 8 3`
+`n & (n - 1)` clears the **lowest** set bit (101100 → 101000 = 40). `n & -n` isolates it (100 = 4). There are 3 ones (also `n.bit_count()` in 3.10+).
+:::
+
+:::quiz
+Greedy "always take the biggest coin that fits" with coins `[1, 3, 4]` and amount 6 gives…
+- [ ] 2 coins (optimal)
+- [x] 3 coins (4+1+1), not optimal
+- [ ] It fails to find any answer
+Greedy picks 4, then 1, then 1, but 3+3 uses only 2 coins. Greedy is only correct when you can prove the greedy choice is always safe (it works for canonical coin systems like `[1, 5, 10, 25]`). Otherwise, use DP.
+:::
+
 ## Practice problems
 
 :::problem basic | Best time to buy and sell stock II | greedy sum of rises
@@ -415,4 +450,157 @@ print(fractional_knapsack(items, 50), greedy_01(items, 50), dp_01(items, 50))
 ```
 :::explain
 With fractions allowed, the highest value-per-kg items should always be used first, and an exchange argument proves it, so greedy is optimal (240). In 0/1 knapsack, taking the best-ratio items (60 + 100 = 160) leaves 20 kg of capacity unusable, while the optimum takes the 20 kg and 30 kg items (220). Indivisibility breaks the greedy-choice property, which is the textbook illustration of when you need DP.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Single number | LeetCode 136 | https://leetcode.com/problems/single-number/
+Every element appears twice except one. Find it in O(n) time and **O(1) extra space**.
+:::starter
+```python norun
+def single_number(nums):
+    pass
+```
+:::tests
+```python norun
+assert single_number([2, 2, 1]) == 1
+assert single_number([4, 1, 2, 1, 2]) == 4
+assert single_number([-3]) == -3
+assert single_number([7, -1, 7, 0, 0]) == -1
+```
+:::solution
+```python
+from functools import reduce
+from operator import xor
+
+def single_number(nums):
+    x = 0
+    for v in nums:
+        x ^= v          # pairs cancel: a ^ a == 0, a ^ 0 == a
+    return x
+
+print(single_number([4, 1, 2, 1, 2]), reduce(xor, [7, -1, 7, 0, 0]))
+```
+:::explain
+XOR is **commutative**, **associative** and **self-inverse** (`a ^ a = 0`), and 0 is its identity. XOR-ing everything reorders into (pairs) ^ single = 0 ^ single. It works for negative numbers too, because Python ints behave like infinite two's complement.
+:::complexity
+O(n) time, O(1) space.
+:::end
+
+:::program basic | Number of 1 bits | LeetCode 191 | https://leetcode.com/problems/number-of-1-bits/
+Count the set bits of a non-negative int **without** `bin()` or `bit_count()`, using Kernighan's trick so the loop runs once per set bit.
+:::starter
+```python norun
+def hamming_weight(n):
+    pass
+```
+:::tests
+```python norun
+assert hamming_weight(11) == 3
+assert hamming_weight(128) == 1
+assert hamming_weight(0) == 0
+assert hamming_weight(2147483645) == 30
+assert all(hamming_weight(n) == bin(n).count("1") for n in range(3000))
+assert hamming_weight(2**200 - 1) == 200
+```
+:::solution
+```python
+def hamming_weight(n):
+    count = 0
+    while n:
+        n &= n - 1      # drop the lowest set bit
+        count += 1
+    return count
+
+print(hamming_weight(11), hamming_weight(2**200 - 1))
+```
+:::explain
+Subtracting 1 flips the lowest set bit to 0 and all the 0s below it to 1, so `n & (n - 1)` erases exactly that one bit. The loop therefore runs popcount(n) times, not bit_length(n) times. For n = 128 (10000000) it runs once.
+:::trace
+| n (binary) | n − 1 | n & (n − 1) | count |
+|---|---|---|---|
+| 1011 | 1010 | 1010 | 1 |
+| 1010 | 1001 | 1000 | 2 |
+| 1000 | 0111 | 0000 | 3 |
+:::complexity
+O(popcount) iterations.
+:::end
+
+:::program medium | Minimum arrows to burst balloons | LeetCode 452 | https://leetcode.com/problems/minimum-number-of-arrows-to-burst-balloons/
+Each balloon spans `[start, end]` on the x-axis. An arrow shot at x bursts every balloon with `start ≤ x ≤ end`. Return the minimum number of arrows.
+:::starter
+```python norun
+def find_min_arrow_shots(points):
+    pass
+```
+:::tests
+```python norun
+assert find_min_arrow_shots([[10, 16], [2, 8], [1, 6], [7, 12]]) == 2
+assert find_min_arrow_shots([[1, 2], [3, 4], [5, 6], [7, 8]]) == 4
+assert find_min_arrow_shots([[1, 2], [2, 3], [3, 4], [4, 5]]) == 2
+assert find_min_arrow_shots([[1, 10]]) == 1 and find_min_arrow_shots([]) == 0
+assert find_min_arrow_shots([[-2**31, 2**31 - 1], [0, 1]]) == 1
+```
+:::hint
+Sort by **end**. Shoot at the end of the first balloon; that arrow also bursts every balloon starting at or before that point. Shoot again only when a balloon starts after the last arrow.
+:::solution
+```python
+def find_min_arrow_shots(points):
+    arrows, last = 0, float("-inf")
+    for start, end in sorted(points, key=lambda p: p[1]):
+        if start > last:        # not hit by the previous arrow
+            arrows += 1
+            last = end          # shoot as far right as this balloon allows
+    return arrows
+
+print(find_min_arrow_shots([[10, 16], [2, 8], [1, 6], [7, 12]]))
+```
+:::explain
+**Exchange argument**: the balloon that ends first must be hit by some arrow, and moving that arrow right to its end never loses a balloon (anything it hit started before that end, and ends no earlier). So the greedy choice is safe, and the rest is the same problem. This is interval scheduling (LC 435) in disguise. Note `start > last`, not `>=`: touching endpoints share an arrow.
+:::complexity
+O(n log n) time for the sort.
+:::end
+
+:::program hard | Minimum number of refueling stops | LeetCode 871 | https://leetcode.com/problems/minimum-number-of-refueling-stops/
+A car starts with `start_fuel` litres (1 litre = 1 mile). `stations[i] = [position, fuel]`, sorted by position. Return the minimum number of stops needed to reach `target`, or −1 if it can't.
+:::starter
+```python norun
+def min_refuel_stops(target, start_fuel, stations):
+    pass
+```
+:::tests
+```python norun
+assert min_refuel_stops(1, 1, []) == 0
+assert min_refuel_stops(100, 1, [[10, 100]]) == -1
+assert min_refuel_stops(100, 10, [[10, 60], [20, 30], [30, 30], [60, 40]]) == 2
+assert min_refuel_stops(100, 50, [[25, 25], [50, 50]]) == 1
+assert min_refuel_stops(1000, 299, [[13, 21], [26, 115], [100, 47], [225, 99], [299, 141], [444, 198], [608, 190], [636, 157], [647, 255], [841, 123]]) == 4
+```
+:::hint
+Drive as far as you can. Every station you pass goes into a **max-heap** of "fuel I could have taken". When you're about to run out, retroactively take the biggest one you passed. Counting those retroactive pickups gives the answer.
+:::solution
+```python
+import heapq
+
+def min_refuel_stops(target, start_fuel, stations):
+    passed = []                         # max-heap via negatives
+    reach, stops, i = start_fuel, 0, 0
+    while reach < target:
+        while i < len(stations) and stations[i][0] <= reach:
+            heapq.heappush(passed, -stations[i][1])   # reachable: remember it
+            i += 1
+        if not passed:
+            return -1                   # stuck, and nothing left to take
+        reach += -heapq.heappop(passed) # take the biggest tank we drove past
+        stops += 1
+    return stops
+
+print(min_refuel_stops(100, 10, [[10, 60], [20, 30], [30, 30], [60, 40]]))
+```
+:::explain
+It's a greedy choice backed by a heap. If we must stop k times, the best k stops among those reachable are the k biggest, and *when* we stopped doesn't matter, only *whether* we could reach the station. So we defer the decision: collect the reachable stations and, whenever fuel is short, pop the largest. Each station is pushed and popped at most once. The O(n²) DP (`dp[k]` = the farthest reach with k stops) also works and makes a good comparison.
+:::complexity
+O(n log n) time, O(n) space.
 :::end

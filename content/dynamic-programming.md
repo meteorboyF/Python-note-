@@ -222,6 +222,60 @@ print(lis_quadratic(nums), lis_fast(nums))
 | 9 | Exponential state spaces | choose a smaller state |
 | 10 | Forgetting `-1` / impossible handling | check `inf` at the end |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+dp = [1] + [0] * 5
+for coin in [1, 2]:
+    for a in range(coin, 6):
+        dp[a] += dp[a - coin]
+print(dp[5])
+```
+What prints?
+- [ ] `8`
+- [x] `3`
+- [ ] `5`
+With coins in the **outer** loop, each combination is counted once regardless of order: 5 = 1+1+1+1+1 = 1+1+1+2 = 1+2+2. Swapping the loops would count ordered sequences (8, like climbing stairs).
+:::
+
+:::quiz
+```python
+from functools import lru_cache
+calls = 0
+@lru_cache(maxsize=None)
+def f(n):
+    global calls
+    calls += 1
+    return n if n < 2 else f(n - 1) + f(n - 2)
+f(20)
+print(calls)
+```
+What prints?
+- [x] `21`
+- [ ] `20`
+- [ ] `21891`
+With memoisation, each of `f(0)…f(20)` executes its body exactly once, so 21 calls. Without the cache, the body would run 21,891 times.
+:::
+
+:::quiz
+```python
+a, b = "abcde", "ace"
+dp = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+for i in range(1, len(a) + 1):
+    for j in range(1, len(b) + 1):
+        dp[i][j] = dp[i-1][j-1] + 1 if a[i-1] == b[j-1] else max(dp[i-1][j], dp[i][j-1])
+print(dp[3][2], dp[-1][-1])
+```
+What prints?
+- [ ] `1 3`
+- [x] `2 3`
+- [ ] `2 2`
+`dp[i][j]` is the LCS of the prefixes `a[:i]` and `b[:j]`. LCS("abc", "ac") = 2 ("ac"), and the full LCS("abcde", "ace") = 3.
+:::
+
 ## Practice problems
 
 :::problem basic | Min cost climbing stairs | 1-D DP
@@ -442,4 +496,178 @@ print(round(tsp_bitmask(D), 6) == round(tsp_brute(D), 6), round(tsp_bitmask(D), 
 ```
 :::explain
 The state is **which cities are visited** (a bitmask) plus **where we are now**. The order in which earlier cities were visited doesn't matter for the future, and that's the DP insight that collapses n! permutations into n·2ⁿ states. For n = 15 that's about 500K states versus 87 billion permutations. Bit tricks: `mask >> j & 1` tests membership, and `mask | 1 << k` adds a city.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Climbing stairs | LeetCode 70 | https://leetcode.com/problems/climbing-stairs/
+You can climb 1 or 2 steps at a time. How many distinct ways are there to reach step `n`? Make it O(n) time and O(1) space.
+:::starter
+```python norun
+def climb_stairs(n):
+    pass
+```
+:::tests
+```python norun
+assert [climb_stairs(n) for n in range(1, 8)] == [1, 2, 3, 5, 8, 13, 21]
+assert climb_stairs(45) == 1836311903
+assert climb_stairs(200) > 10**41
+```
+:::solution
+```python
+def climb_stairs(n):
+    a, b = 1, 1                 # ways(0), ways(1)
+    for _ in range(n - 1):
+        a, b = b, a + b         # ways(i) = ways(i-1) + ways(i-2)
+    return b
+
+print([climb_stairs(n) for n in range(1, 8)])
+```
+:::explain
+**Define the state**: `ways(i)` is the number of ways to reach step i. **Recurrence**: the last move was a 1-step (from i−1) or a 2-step (from i−2), so `ways(i) = ways(i−1) + ways(i−2)`. **Base cases**: `ways(0) = ways(1) = 1`. Because each state depends only on the previous two, two variables replace the table: the **rolling-array** optimisation.
+:::complexity
+O(n) time, O(1) space.
+:::end
+
+:::program medium | Longest common subsequence | LeetCode 1143 | https://leetcode.com/problems/longest-common-subsequence/
+Return the length of the LCS of two strings **and** one actual LCS string. Use the space-efficient version for the length.
+:::starter
+```python norun
+def lcs_length(a, b):
+    pass
+
+def lcs_string(a, b):
+    pass
+```
+:::tests
+```python norun
+assert lcs_length("abcde", "ace") == 3 and lcs_length("abc", "def") == 0
+assert lcs_length("abc", "abc") == 3 and lcs_length("", "abc") == 0
+assert lcs_string("abcde", "ace") == "ace"
+s = lcs_string("AGGTAB", "GXTXAYB")
+assert len(s) == 4 == lcs_length("AGGTAB", "GXTXAYB")
+it1, it2 = iter("AGGTAB"), iter("GXTXAYB")
+assert all(c in it1 for c in s) and all(c in it2 for c in s)
+assert lcs_length("a" * 800, "a" * 800) == 800
+```
+:::hint
+`dp[i][j]` is the LCS of `a[:i]` and `b[:j]`. If the last characters match, it's `1 + dp[i-1][j-1]`; otherwise `max(dp[i-1][j], dp[i][j-1])`. To rebuild the string, walk back from `dp[m][n]`.
+:::solution
+```python
+def lcs_length(a, b):
+    if len(b) > len(a):
+        a, b = b, a                           # keep the row short
+    prev = [0] * (len(b) + 1)
+    for ch in a:
+        cur = [0]
+        for j, ch2 in enumerate(b, 1):
+            cur.append(prev[j - 1] + 1 if ch == ch2 else max(prev[j], cur[j - 1]))
+        prev = cur
+    return prev[-1]
+
+def lcs_string(a, b):
+    m, n = len(a), len(b)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            dp[i][j] = dp[i-1][j-1] + 1 if a[i-1] == b[j-1] else max(dp[i-1][j], dp[i][j-1])
+    out, i, j = [], m, n
+    while i and j:                            # walk back through the decisions
+        if a[i-1] == b[j-1]:
+            out.append(a[i-1]); i -= 1; j -= 1
+        elif dp[i-1][j] >= dp[i][j-1]:
+            i -= 1
+        else:
+            j -= 1
+    return "".join(reversed(out))
+
+print(lcs_length("abcde", "ace"), lcs_string("AGGTAB", "GXTXAYB"))
+```
+:::explain
+This is the textbook **2-D DP**: each cell depends on the cell to its left, the one above and the diagonal, so only one previous row is needed for the length (O(min(m, n)) space). **Reconstruction** needs the full table: start at the bottom-right, and when the characters match that character is in the LCS (go diagonal); otherwise follow the larger neighbour. The tests check that your string really is a common subsequence, because several LCSs can be valid.
+:::complexity
+O(m·n) time; O(min(m, n)) space for the length, O(m·n) to reconstruct.
+:::end
+
+:::program medium | Coin change II | LeetCode 518 | https://leetcode.com/problems/coin-change-ii/
+Count the **combinations** (order doesn't matter) of coins that sum to `amount`, with unlimited coins of each type.
+:::starter
+```python norun
+def change(amount, coins):
+    pass
+```
+:::tests
+```python norun
+assert change(5, [1, 2, 5]) == 4
+assert change(3, [2]) == 0
+assert change(10, [10]) == 1
+assert change(0, [7]) == 1
+assert change(500, [3, 5, 7, 8, 9, 10, 11]) == 35502874
+```
+:::hint
+1-D DP: `dp[a]` is the number of ways to make `a`. Put the **coins in the outer loop** so each combination is built in one fixed coin order.
+:::solution
+```python
+def change(amount, coins):
+    dp = [1] + [0] * amount         # one way to make 0: take nothing
+    for coin in coins:              # coins outer => combinations, not permutations
+        for a in range(coin, amount + 1):
+            dp[a] += dp[a - coin]   # ways without this coin + ways using it again
+    return dp[amount]
+
+print(change(5, [1, 2, 5]))
+```
+:::explain
+After processing the first k coins, `dp[a]` counts the combinations using only those coins. Adding coin c: each way to make `a` either uses no c (the old `dp[a]`) or uses at least one (`dp[a - c]`, already updated this round, which allows unlimited reuse). Looping amounts in the **outer** loop instead would count `1+2` and `2+1` separately: that's Combination Sum IV (LC 377). Knowing which loop order to use is the key idea here.
+:::complexity
+O(amount · len(coins)) time, O(amount) space.
+:::end
+
+:::program hard | Regular expression matching | LeetCode 10 | https://leetcode.com/problems/regular-expression-matching/
+Implement full-string matching with `.` (any single character) and `*` (zero or more of the previous element). No `re` module.
+:::starter
+```python norun
+def is_match(s, p):
+    pass
+```
+:::tests
+```python norun
+assert is_match("aa", "a") is False
+assert is_match("aa", "a*") is True
+assert is_match("ab", ".*") is True
+assert is_match("aab", "c*a*b") is True
+assert is_match("mississippi", "mis*is*p*.") is False
+assert is_match("", "a*b*") is True
+assert is_match("a" * 30 + "b", "a*a*a*a*a*a*c") is False
+import re, random
+for _ in range(300):
+    s = "".join(random.choice("ab") for _ in range(random.randint(0, 6)))
+    p = "".join(random.choice(["a", "b", ".", "a*", "b*", ".*"]) for _ in range(random.randint(0, 4)))
+    assert is_match(s, p) == (re.fullmatch(p, s) is not None), (s, p)
+```
+:::hint
+Let `dp(i, j)` mean "does `s[i:]` match `p[j:]`?". If `p[j+1] == '*'`, either skip `x*` entirely (`dp(i, j+2)`) or, if `s[i]` matches `x`, consume one character and stay (`dp(i+1, j)`). Memoise it.
+:::solution
+```python
+from functools import lru_cache
+
+def is_match(s, p):
+    @lru_cache(maxsize=None)
+    def dp(i, j):
+        if j == len(p):
+            return i == len(s)
+        first = i < len(s) and p[j] in (s[i], ".")
+        if j + 1 < len(p) and p[j + 1] == "*":
+            return dp(i, j + 2) or (first and dp(i + 1, j))   # zero uses, or one more
+        return first and dp(i + 1, j + 1)
+    return dp(0, 0)
+
+print(is_match("aab", "c*a*b"), is_match("mississippi", "mis*is*p*."))
+```
+:::explain
+Plain recursion is exponential on patterns like `a*a*a*a*c` (try the 7th test without the cache). There are only (len(s)+1)·(len(p)+1) distinct `(i, j)` states, so memoisation makes it polynomial. The `*` case is a **choice**: use the starred element zero times, or match one character and keep the star available. The last test cross-checks 300 random cases against Python's own `re.fullmatch`.
+:::complexity
+O(m·n) time and space.
 :::end

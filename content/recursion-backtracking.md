@@ -254,6 +254,58 @@ print(max_crossing_subarray([-2, 1, -3, 4, -1, 2, 1, -5, 4]))
 | 9 | Using a global counter without `nonlocal` | `nonlocal` / return values |
 | 10 | Deep recursion on big inputs | iterative + explicit stack |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python
+def f(n):
+    if n == 0:
+        return ""
+    return f(n - 1) + str(n) + f(n - 1)
+print(f(3))
+```
+What prints?
+- [x] `1213121`
+- [ ] `123`
+- [ ] `3212123`
+`f(1) = "1"`, `f(2) = "1"+"2"+"1" = "121"`, and `f(3) = "121"+"3"+"121"`. The call tree has 2ⁿ − 1 nodes: this is the shape of the Tower of Hanoi solution.
+:::
+
+:::quiz
+```python
+res = []
+def go(path, rest):
+    if not rest:
+        res.append(path)
+        return
+    for i in range(len(rest)):
+        go(path + rest[i], rest[:i] + rest[i + 1:])
+go("", "abc")
+print(len(res), res[3])
+```
+What prints?
+- [ ] `6 cab`
+- [x] `6 bca`
+- [ ] `9 bca`
+There are 3! = 6 permutations, generated in order `abc, acb, bac, bca, cab, cba`, so index 3 is `bca`. Passing new strings (`path + …`) means nothing needs undoing on the way back.
+:::
+
+:::quiz
+```python
+import sys
+def depth(n):
+    return 0 if n == 0 else 1 + depth(n - 1)
+print(sys.getrecursionlimit() >= 1000, depth(500))
+```
+What prints?
+- [x] `True 500`
+- [ ] `False 500`
+- [ ] `RecursionError`
+The default recursion limit is 1000 frames, so depth 500 is fine. `depth(5000)` would raise `RecursionError`, which is why deep recursions in Python are often rewritten with an explicit stack.
+:::
+
 ## Practice problems
 
 :::problem basic | Letter combinations of a phone number | backtracking over mapping
@@ -498,4 +550,161 @@ print(add_operators("123", 6), add_operators("232", 8), add_operators("105", 5),
 ```
 :::explain
 To respect precedence without parsing, keep `last`, the value of the most recent **multiplicative term**. For `*`, remove `last` from the running total and add `last * n` instead: `2+3*4` becomes `(5 - 3) + 3*4`. This "undo the last term" trick lets backtracking evaluate as it builds. The leading-zero rule stops `05` but allows a lone `0`.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Reverse string (recursively) | LeetCode 344 | https://leetcode.com/problems/reverse-string/
+Reverse a list of characters **in place** using recursion with two indices: no slicing, no `.reverse()`.
+:::starter
+```python norun
+def reverse_string(s, lo=0, hi=None):
+    pass
+```
+:::tests
+```python norun
+a = list("hello"); reverse_string(a); assert a == list("olleh")
+b = list("Hannah"); reverse_string(b); assert b == list("hannaH")
+c = []; reverse_string(c); assert c == []
+d = ["x"]; reverse_string(d); assert d == ["x"]
+e = list(range(800)); reverse_string(e); assert e == list(range(799, -1, -1))
+```
+:::solution
+```python
+def reverse_string(s, lo=0, hi=None):
+    if hi is None:
+        hi = len(s) - 1
+    if lo >= hi:                       # base case: 0 or 1 elements left in the middle
+        return
+    s[lo], s[hi] = s[hi], s[lo]
+    reverse_string(s, lo + 1, hi - 1)  # the same problem, two elements smaller
+
+s = list("hello"); reverse_string(s); print(s)
+```
+:::explain
+The recursive leap of faith: "if I swap the ends, the rest is the same problem on the inside". The base case `lo >= hi` covers both even and odd lengths. The depth is n/2, so 800 elements means 400 frames, under the 1000 limit. A 10⁵-element list would need the iterative version.
+:::complexity
+O(n) time, O(n) call stack.
+:::end
+
+:::program basic | Fibonacci, three ways | LeetCode 509 | https://leetcode.com/problems/fibonacci-number/
+Implement `fib(n)` (F(0)=0, F(1)=1). Your version must handle `n = 300` instantly, which the naive recursion can't.
+:::starter
+```python norun
+def fib(n):
+    pass
+```
+:::tests
+```python norun
+assert [fib(i) for i in range(10)] == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+assert fib(30) == 832040
+assert fib(300) == 222232244629420445529739893461909967206666939096499764990979600
+```
+:::solution
+```python
+from functools import lru_cache
+
+def fib_naive(n):                       # O(phi^n): recomputes the same subproblems
+    return n if n < 2 else fib_naive(n - 1) + fib_naive(n - 2)
+
+@lru_cache(maxsize=None)
+def fib_memo(n):                        # O(n): each n computed once
+    return n if n < 2 else fib_memo(n - 1) + fib_memo(n - 2)
+
+def fib(n):                             # O(n) time, O(1) space, no recursion limit
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+
+print(fib_naive(15), fib_memo(80), fib(300))
+```
+:::explain
+The naive call tree has about 1.6ⁿ nodes because `fib(n-2)` is computed inside both branches. **Memoisation** caches each answer, so the tree collapses to a chain of n calls. The **bottom-up** loop keeps only the last two values. This progression (brute recursion → memo → table → O(1) space) is the standard recipe for turning recursion into dynamic programming.
+:::complexity
+Naive O(φⁿ), memo O(n) time/space, loop O(n) time and O(1) space.
+:::end
+
+:::program medium | Generate parentheses | LeetCode 22 | https://leetcode.com/problems/generate-parentheses/
+Return all well-formed strings of `n` pairs of parentheses, in **sorted** order.
+:::starter
+```python norun
+def generate_parenthesis(n):
+    pass
+```
+:::tests
+```python norun
+assert generate_parenthesis(1) == ["()"]
+assert generate_parenthesis(2) == ["(())", "()()"]
+assert generate_parenthesis(3) == ["((()))", "(()())", "(())()", "()(())", "()()()"]
+assert len(generate_parenthesis(6)) == 132            # the Catalan number C6
+```
+:::hint
+Build left to right, tracking the counts `opened` and `closed`. You may add `(` while `opened < n`, and `)` while `closed < opened`. Then every completed string is valid, with no need to check afterwards.
+:::solution
+```python
+def generate_parenthesis(n):
+    out = []
+    def go(path, opened, closed):
+        if len(path) == 2 * n:
+            out.append("".join(path))
+            return
+        if opened < n:
+            path.append("(")
+            go(path, opened + 1, closed)
+            path.pop()                    # undo: backtrack
+        if closed < opened:
+            path.append(")")
+            go(path, opened, closed + 1)
+            path.pop()
+    go([], 0, 0)
+    return out                            # '(' < ')' in ASCII, so this is already sorted
+
+print(generate_parenthesis(3))
+```
+:::explain
+This is **backtracking with pruning**: instead of generating all 2²ⁿ strings and filtering, the two rules cut off any branch that could never become valid. Exploring `(` before `)` produces the output in sorted order for free, since `'('` (40) < `')'` (41). The `append`/`pop` pair is the choose → explore → un-choose rhythm of every backtracking solution.
+:::complexity
+O(Cₙ · n) where Cₙ ≈ 4ⁿ / (n^1.5 √π) is the nth Catalan number.
+:::end
+
+:::program hard | N-Queens II | LeetCode 52 | https://leetcode.com/problems/n-queens-ii/
+Count the ways to place `n` queens on an n×n board so that no two attack each other. Make `n = 9` run quickly.
+:::starter
+```python norun
+def total_n_queens(n):
+    pass
+```
+:::tests
+```python norun
+assert [total_n_queens(n) for n in range(1, 9)] == [1, 0, 0, 2, 10, 4, 40, 92]
+assert total_n_queens(9) == 352
+```
+:::hint
+Place one queen per **row**. A square `(r, c)` is attacked if column `c`, diagonal `r - c` or anti-diagonal `r + c` is already used. Keep three sets for O(1) checks.
+:::solution
+```python
+def total_n_queens(n):
+    cols, diag, anti = set(), set(), set()
+    def place(r):
+        if r == n:
+            return 1                                   # all rows filled: one solution
+        count = 0
+        for c in range(n):
+            if c in cols or r - c in diag or r + c in anti:
+                continue                               # attacked: prune
+            cols.add(c); diag.add(r - c); anti.add(r + c)
+            count += place(r + 1)
+            cols.remove(c); diag.remove(r - c); anti.remove(r + c)
+        return count
+    return place(0)
+
+print([total_n_queens(n) for n in range(1, 9)])
+```
+:::explain
+One queen per row removes row conflicts by construction. On a diagonal going down-right, `r - c` is constant; on an anti-diagonal, `r + c` is constant. That turns "is this square attacked?" into three set lookups. The search tree is huge in theory (nⁿ), but pruning keeps n = 9 to tens of thousands of nodes. A bitmask version (from the bits chapter) is the next speed-up.
+:::complexity
+O(n!) worst case, O(n) space.
 :::end
