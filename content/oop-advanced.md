@@ -265,6 +265,66 @@ print(report(PrinterAdapter(LegacyPrinter())))
 | 9 | Memory leaks from caches/registries holding objects | `weakref.WeakValueDictionary` |
 | 10 | Strategy via subclasses when a function would do | pass callables |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+class Desc:
+    def __get__(self, obj, objtype=None):
+        return "from descriptor"
+class A:
+    attr = Desc()
+a = A()
+a.__dict__["attr"] = "from instance"
+print(a.attr)
+```
+What prints?
+- [ ] `from descriptor`
+- [x] `from instance`
+- [ ] `AttributeError`
+`Desc` has only `__get__`, which makes it a **non-data** descriptor, and the instance `__dict__` wins over those. Add a `__set__` (making it a data descriptor) and the descriptor would win instead. This is exactly how `cached_property` caches.
+:::
+
+:::quiz
+```python norun
+class Meta(type):
+    def __new__(mcls, name, bases, ns):
+        ns["tag"] = name.lower()
+        return super().__new__(mcls, name, bases, ns)
+class Base(metaclass=Meta): pass
+class Child(Base): pass
+print(Base.tag, Child.tag, type(Child).__name__)
+```
+What prints?
+- [x] `base child Meta`
+- [ ] `base base type`
+- [ ] `base base Meta`
+A metaclass is inherited: creating `Child` also runs `Meta.__new__`, which sets its own `tag`. A class's type is its metaclass, so `type(Child)` is `Meta`.
+:::
+
+:::quiz
+```python norun
+class Singleton:
+    _inst = None
+    def __new__(cls, *args):
+        if cls._inst is None:
+            cls._inst = super().__new__(cls)
+        return cls._inst
+    def __init__(self, value):
+        self.value = value
+a = Singleton(1)
+b = Singleton(2)
+print(a is b, a.value)
+```
+What prints?
+- [ ] `True 1`
+- [x] `True 2`
+- [ ] `False 1`
+`__new__` returns the same instance, but `__init__` still runs on **every** call, overwriting `value` with 2. A classic singleton gotcha: guard `__init__`, or use a module-level instance instead.
+:::
+
 ## Practice problems
 
 :::problem basic | Typed attribute descriptor | descriptors, __set_name__
@@ -650,4 +710,267 @@ for bad in [lambda: nums.append("6"), lambda: nums.insert(0, 1.5), lambda: Typed
 ```
 :::explain
 `Class[X]` calls `__class_getitem__(X)`. Here we build a real subclass with `type(name, bases, ns)`, the same thing a `class` statement does, and store it in a cache so the same parameter always yields the same class. Instances can then check `self.item_type` at run time. Typing generics (`list[int]`) only annotate, while this one **enforces**. We subclass `UserList` so that every mutation path is a Python method we can intercept.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Validated fields with descriptors | Real-world task
+Write a descriptor `Bounded(lo, hi)` that stores values per instance (using `__set_name__`) and raises `ValueError` if a value is outside `[lo, hi]`, or `TypeError` if it isn't a number. Accessing it on the **class** returns the descriptor itself. Use it in `Product` for `price` (0–10000) and `rating` (1–5).
+:::starter
+```python norun
+class Bounded:
+    def __init__(self, lo, hi):
+        pass
+```
+:::tests
+```python norun
+p = Product("pen", 2.5, 4)
+assert (p.price, p.rating) == (2.5, 4)
+p.rating = 5; assert p.rating == 5
+assert raises(ValueError, setattr, p, "rating", 6)
+assert raises(TypeError, setattr, p, "price", "cheap")
+assert raises(ValueError, Product, "x", -1, 3)
+q = Product("cup", 9, 1)
+assert p.price == 2.5 and q.price == 9
+assert isinstance(Product.price, Bounded)
+```
+:::solution
+```python
+class Bounded:
+    def __init__(self, lo, hi):
+        self.lo, self.hi = lo, hi
+    def __set_name__(self, owner, name):
+        self.name = name                       # learn the attribute name automatically
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self                        # accessed on the class
+        return obj.__dict__[self.name]
+    def __set__(self, obj, value):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise TypeError(f"{self.name} must be a number")
+        if not self.lo <= value <= self.hi:
+            raise ValueError(f"{self.name} must be in [{self.lo}, {self.hi}], got {value}")
+        obj.__dict__[self.name] = value        # per-INSTANCE storage
+
+class Product:
+    price = Bounded(0, 10_000)
+    rating = Bounded(1, 5)
+    def __init__(self, name, price, rating):
+        self.name, self.price, self.rating = name, price, rating
+
+p = Product("pen", 2.5, 4)
+print(p.price, p.rating, vars(p))
+```
+:::explain
+The descriptor is a **class attribute** shared by all products, so it must store each value on the **instance** (`obj.__dict__`), never on itself, or every product would share one price. Because it defines `__set__`, it's a data descriptor that wins over the instance dict, so storing under the same name is safe. `__set_name__` removes the need to repeat the field name. This is the machinery behind ORMs and Pydantic-style validation.
+:::complexity
+O(1) per access.
+:::end
+
+:::program medium | Observer / event emitter | Real-world task
+Write `EventEmitter` with `on(event, handler)` (returning an **unsubscribe** function), `once(event, handler)` (auto-removed after its first call), and `emit(event, *args)` (calling the handlers in registration order and returning their results). Handlers that unsubscribe themselves or others **during** an emit must not break iteration.
+:::starter
+```python norun
+class EventEmitter:
+    def __init__(self):
+        pass
+```
+:::tests
+```python norun
+e = EventEmitter()
+log = []
+off = e.on("save", lambda doc: log.append(f"A:{doc}") or "a")
+e.once("save", lambda doc: log.append(f"B:{doc}") or "b")
+assert e.emit("save", "d1") == ["a", "b"]
+assert e.emit("save", "d2") == ["a"]
+off()
+assert e.emit("save", "d3") == [] and log == ["A:d1", "B:d1", "A:d2"]
+assert e.emit("nothing") == []
+e2 = EventEmitter(); calls = []
+def h1(): calls.append(1); off2()
+off2 = e2.on("x", h1)
+e2.on("x", lambda: calls.append(2))
+e2.emit("x"); e2.emit("x")
+assert calls == [1, 2, 2]
+```
+:::solution
+```python
+from collections import defaultdict
+
+class EventEmitter:
+    def __init__(self):
+        self._handlers = defaultdict(list)
+
+    def on(self, event, handler):
+        self._handlers[event].append(handler)
+        def unsubscribe():
+            if handler in self._handlers[event]:
+                self._handlers[event].remove(handler)
+        return unsubscribe
+
+    def once(self, event, handler):
+        def wrapper(*args):
+            off()
+            return handler(*args)
+        off = self.on(event, wrapper)
+        return off
+
+    def emit(self, event, *args):
+        return [h(*args) for h in list(self._handlers[event])]   # iterate over a COPY
+
+bus = EventEmitter()
+stop = bus.on("tick", lambda n: f"tick {n}")
+bus.once("tick", lambda n: f"first tick only ({n})")
+print(bus.emit("tick", 1), bus.emit("tick", 2))
+```
+:::explain
+`on` returns a **closure** that knows exactly which handler to remove, which is a neat alternative to "remove by name" APIs. `once` wraps the handler so it unsubscribes itself before running. The crucial detail is `list(...)` in `emit`: handlers may change the subscription list while it's being iterated, and iterating over a snapshot keeps that safe. This is the Observer pattern behind GUI toolkits and Node's EventEmitter.
+:::complexity
+emit O(handlers). Unsubscribe O(handlers) (list.remove).
+:::end
+
+:::program medium | Auto-registering plugins with __init_subclass__ | Real-world task
+Create a base `Exporter` where each subclass declares a class attribute `fmt` and is **automatically registered** when it's defined (via `__init_subclass__`). Subclasses without a `fmt` (or with a duplicate one) must fail **at class definition**. `Exporter.create(fmt)` returns an instance, and `Exporter.formats()` returns the sorted format names. Implement CSV and JSON exporters with `export(rows) -> str`.
+:::starter
+```python norun
+import json
+
+class Exporter:
+    pass
+```
+:::tests
+```python norun
+rows = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+assert Exporter.formats() == ["csv", "json"]
+assert Exporter.create("csv").export(rows) == "a,b\n1,2\n3,4"
+assert Exporter.create("json").export(rows) == '[{"a": 1, "b": 2}, {"a": 3, "b": 4}]'
+assert raises(KeyError, Exporter.create, "xml")
+def define_bad():
+    class NoFmt(Exporter): pass
+assert raises(TypeError, define_bad)
+def define_dup():
+    class AnotherCSV(Exporter):
+        fmt = "csv"
+assert raises(ValueError, define_dup)
+assert Exporter.formats() == ["csv", "json"]
+```
+:::solution
+```python
+import json
+
+class Exporter:
+    _registry = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        fmt = cls.__dict__.get("fmt")
+        if not fmt:
+            raise TypeError(f"{cls.__name__} must define a 'fmt' class attribute")
+        if fmt in Exporter._registry:
+            raise ValueError(f"format {fmt!r} already registered")
+        Exporter._registry[fmt] = cls
+
+    @classmethod
+    def create(cls, fmt):
+        return cls._registry[fmt]()
+
+    @classmethod
+    def formats(cls):
+        return sorted(cls._registry)
+
+    def export(self, rows):
+        raise NotImplementedError
+
+class CSVExporter(Exporter):
+    fmt = "csv"
+    def export(self, rows):
+        cols = list(rows[0])
+        return "\n".join([",".join(cols)] + [",".join(str(r[c]) for c in cols) for r in rows])
+
+class JSONExporter(Exporter):
+    fmt = "json"
+    def export(self, rows):
+        return json.dumps(rows)
+
+print(Exporter.formats(), Exporter.create("csv").export([{"x": 1}, {"x": 2}]))
+```
+:::explain
+Python calls `__init_subclass__` on the **parent** whenever a subclass is created, which makes it a lightweight alternative to metaclasses for registration and validation. Errors fire at **definition time**, so a broken plugin fails on import, not in production. Reading `cls.__dict__` (not `getattr`) requires each subclass to declare its own `fmt` rather than inheriting one. Failed definitions never reach the registry, so the last test still sees only csv and json.
+:::complexity
+O(1) registration and lookup.
+:::end
+
+:::program hard | Strategy + Factory: pricing engine | Real-world task
+Build a pricing engine:
+- **Strategies** are plain functions `(subtotal, ctx) -> discount`: `percent(p)` (a factory returning a strategy), `bulk(min_items, off)`, and `loyalty` (5% if `ctx["years"] >= 2`);
+- `PricingEngine(*strategies, stack=False)`: if `stack` is False, apply only the **best single** discount, otherwise apply them all;
+- the discount never exceeds the subtotal, and the result is rounded to 2 decimals;
+- `PricingEngine.from_config(list_of_dicts)` builds an engine from config like `{"type": "percent", "value": 10}` via a **factory registry**.
+:::starter
+```python norun
+def percent(p):
+    pass
+
+class PricingEngine:
+    def __init__(self, *strategies, stack=False):
+        pass
+```
+:::tests
+```python norun
+ctx = {"items": 12, "years": 3}
+eng = PricingEngine(percent(10), bulk(10, 15.0), loyalty)
+assert eng.total(200, ctx) == 180.0
+assert PricingEngine(percent(10), bulk(10, 15.0), loyalty, stack=True).total(200, ctx) == 155.0
+assert PricingEngine(percent(80), percent(50), stack=True).total(100, {}) == 0.0
+assert PricingEngine().total(99.999, {}) == 100.0
+cfg = [{"type": "percent", "value": 20}, {"type": "bulk", "min_items": 5, "off": 3}]
+assert PricingEngine.from_config(cfg).total(50, {"items": 6}) == 40.0
+assert raises(KeyError, PricingEngine.from_config, [{"type": "mystery"}])
+assert loyalty(100, {"years": 1}) == 0
+```
+:::solution
+```python
+def percent(p):
+    def strategy(subtotal, ctx):
+        return subtotal * p / 100
+    strategy.__name__ = f"percent_{p}"
+    return strategy
+
+def bulk(min_items, off):
+    def strategy(subtotal, ctx):
+        return off if ctx.get("items", 0) >= min_items else 0
+    return strategy
+
+def loyalty(subtotal, ctx):
+    return subtotal * 0.05 if ctx.get("years", 0) >= 2 else 0
+
+class PricingEngine:
+    FACTORIES = {
+        "percent": lambda c: percent(c["value"]),
+        "bulk": lambda c: bulk(c["min_items"], c["off"]),
+        "loyalty": lambda c: loyalty,
+    }
+
+    def __init__(self, *strategies, stack=False):
+        self.strategies, self.stack = strategies, stack
+
+    @classmethod
+    def from_config(cls, config, stack=False):
+        return cls(*(cls.FACTORIES[c["type"]](c) for c in config), stack=stack)
+
+    def total(self, subtotal, ctx):
+        discounts = [s(subtotal, ctx) for s in self.strategies] or [0]
+        discount = sum(discounts) if self.stack else max(discounts)
+        return round(subtotal - min(discount, subtotal), 2)
+
+ctx = {"items": 12, "years": 3}
+print(PricingEngine(percent(10), bulk(10, 15), loyalty).total(200, ctx),
+      PricingEngine(percent(10), bulk(10, 15), loyalty, stack=True).total(200, ctx))
+```
+:::explain
+**Strategy**: each pricing rule is just a function (closures carry their configuration), so adding a rule never touches the engine. **Factory**: `FACTORIES` maps config names to constructors, so the engine can be built from JSON or YAML, which is how business rules are often stored. The engine itself only combines the results: the best one, or all stacked (capped at the subtotal). Python's first-class functions make these patterns much lighter than their Java textbook versions.
+:::complexity
+O(number of strategies) per total.
 :::end

@@ -265,6 +265,60 @@ Use `__new__` when subclassing immutable types (`int`, `str`, `tuple`, `float`),
 | 9 | Inconsistent `__eq__` and `__lt__` (breaks sorting) | derive both from the same key tuple |
 | 10 | `__del__` for cleanup | use context managers; `__del__` timing isn't guaranteed |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+class V:
+    def __init__(self, x): self.x = x
+    def __add__(self, o): return V(self.x + o.x)
+    def __repr__(self): return f"V({self.x})"
+print(V(1) + V(2))
+try:
+    print(sum([V(1), V(2)]))
+except TypeError:
+    print("TypeError")
+```
+What prints?
+- [ ] `V(3)` then `V(3)`
+- [x] `V(3)` then `TypeError`
+- [ ] `TypeError` twice
+`sum` starts from `0`, so it first computes `0 + V(1)`. `int.__add__` doesn't know V and returns NotImplemented, then Python tries `V(1).__radd__(0)`, which doesn't exist, so it raises TypeError. Add `__radd__`, or call `sum(vs, start=V(0))`.
+:::
+
+:::quiz
+```python norun
+class Box:
+    def __init__(self, items): self.items = items
+    def __len__(self): return len(self.items)
+print(bool(Box([])), bool(Box([0])), "yes" if Box([]) else "no")
+```
+What prints?
+- [x] `False True no`
+- [ ] `True True yes`
+- [ ] `False False no`
+Without `__bool__`, Python falls back to `__len__`: a length of zero is falsy. `Box([0])` has length 1, so it's truthy, even though its only item is falsy.
+:::
+
+:::quiz
+```python norun
+class P:
+    def __init__(self, x): self.x = x
+    def __eq__(self, o): return isinstance(o, P) and self.x == o.x
+try:
+    print({P(1)})
+except TypeError as e:
+    print("TypeError")
+```
+What prints?
+- [ ] `{<__main__.P object …>}`
+- [x] `TypeError`
+- [ ] `set()`
+Defining `__eq__` without `__hash__` sets `__hash__ = None`, which makes instances **unhashable**. That's deliberate: equal objects must have equal hashes, and Python can't guess yours.
+:::
+
 ## Practice problems
 
 :::problem basic | Fraction with operators | __add__, __mul__, __eq__, __repr__
@@ -686,4 +740,310 @@ print("df/dx at (3,4) =", df.eval(x=3, y=4), "(expected y - 2x = -2)")
 ```
 :::explain
 Each operator dunder **returns a node** instead of a number, so Python's own parser builds the tree for us, with the correct precedence and associativity. The reflected versions (`__radd__`, `__rmul__`) let plain numbers appear on the left. `eval` and `diff` are recursive, polymorphic methods, with each node class knowing its own rule (sum, product and chain rules). This is the core trick behind SymPy, SQLAlchemy's `User.age > 18`, PyTorch's autograd graph and Pandas query builders.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | 2-D vector class | Real-world task
+Implement `Vec(x, y)` with `+`, `-`, unary `-`, scalar `*` on **both** sides (`v * 3` and `3 * v`), `abs(v)` (the length), `==`, `bool` (False only for the zero vector), and `__repr__` like `Vec(1, 2)`. Make `sum(list_of_vecs)` work by handling `0 + v`.
+:::starter
+```python norun
+import math
+
+class Vec:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+```
+:::tests
+```python norun
+a, b = Vec(1, 2), Vec(3, 4)
+assert a + b == Vec(4, 6) and b - a == Vec(2, 2) and -a == Vec(-1, -2)
+assert a * 3 == Vec(3, 6) and 3 * a == Vec(3, 6)
+assert abs(Vec(3, 4)) == 5.0
+assert repr(a) == "Vec(1, 2)"
+assert not Vec(0, 0) and Vec(0, 1)
+assert sum([a, b, Vec(1, 1)]) == Vec(5, 7)
+assert (a == "nope") is False
+```
+:::solution
+```python
+import math
+
+class Vec:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+    def __repr__(self):
+        return f"Vec({self.x}, {self.y})"
+    def __add__(self, o):
+        if isinstance(o, Vec):
+            return Vec(self.x + o.x, self.y + o.y)
+        return NotImplemented
+    def __radd__(self, o):                    # handles 0 + Vec inside sum()
+        return self if o == 0 else NotImplemented
+    def __sub__(self, o):
+        return Vec(self.x - o.x, self.y - o.y) if isinstance(o, Vec) else NotImplemented
+    def __neg__(self):
+        return Vec(-self.x, -self.y)
+    def __mul__(self, k):
+        return Vec(self.x * k, self.y * k) if isinstance(k, (int, float)) else NotImplemented
+    __rmul__ = __mul__                        # 3 * v
+    def __abs__(self):
+        return math.hypot(self.x, self.y)
+    def __bool__(self):
+        return bool(self.x or self.y)
+    def __eq__(self, o):
+        return isinstance(o, Vec) and (self.x, self.y) == (o.x, o.y)
+    __hash__ = None                           # mutable: keep it unhashable
+
+print(Vec(1, 2) + Vec(3, 4), 3 * Vec(1, 2), abs(Vec(3, 4)), sum([Vec(1, 1), Vec(2, 2)]))
+```
+:::explain
+`3 * v` first tries `int.__mul__(3, v)`, which returns NotImplemented, so Python calls the **reflected** `v.__rmul__(3)`. The same mechanism with `__radd__` makes `sum()` work, since sum starts at `0`. Returning `NotImplemented` (never raising) for foreign types lets Python try the other operand and produce a proper `TypeError` otherwise, and it makes `a == "nope"` simply False.
+:::complexity
+O(1) per operation.
+:::end
+
+:::program medium | Sortable, hashable version numbers | Real-world task
+Implement `Version("1.10.2")` supporting all six comparisons (numeric, not lexicographic: `1.10 > 1.9`), equality where missing parts count as 0 (`Version("1.2") == Version("1.2.0")`), **consistent** hashing (so equal versions dedupe in sets), `str()` returning the original text and `repr()` like `Version('1.2')`. Use `functools.total_ordering`.
+:::starter
+```python norun
+from functools import total_ordering
+
+class Version:
+    def __init__(self, text):
+        pass
+```
+:::tests
+```python norun
+vs = [Version(s) for s in ["1.10", "1.9.3", "1.2", "2.0", "1.2.0"]]
+assert [str(v) for v in sorted(vs)] == ["1.2", "1.2.0", "1.9.3", "1.10", "2.0"]
+assert Version("1.2") == Version("1.2.0") and hash(Version("1.2")) == hash(Version("1.2.0.0"))
+assert len({Version("1.2"), Version("1.2.0"), Version("1.3")}) == 2
+assert Version("1.10") > Version("1.9") and Version("1.0") <= Version("1")
+assert raises(TypeError, lambda: Version("0.9") < "1.0")
+assert max(vs) == Version("2") and repr(Version("1.2")) == "Version('1.2')"
+assert (Version("1.0") == "1.0") is False
+```
+:::hint
+Normalise once: split on `.`, convert to ints, and strip **trailing zeros** into a tuple `key`. Then `__eq__`, `__lt__` and `__hash__` all use that same key, which keeps them consistent.
+:::solution
+```python
+from functools import total_ordering
+
+@total_ordering
+class Version:
+    def __init__(self, text):
+        self.text = text
+        parts = [int(p) for p in text.split(".")]
+        while len(parts) > 1 and parts[-1] == 0:
+            parts.pop()                          # 1.2.0 -> 1.2 (canonical form)
+        self.key = tuple(parts)
+    def __eq__(self, other):
+        return isinstance(other, Version) and self.key == other.key
+    def __lt__(self, other):
+        if not isinstance(other, Version):
+            return NotImplemented
+        return self.key < other.key
+    def __hash__(self):
+        return hash(self.key)                    # equal objects -> equal hashes
+    def __str__(self):
+        return self.text
+    def __repr__(self):
+        return f"Version({self.text!r})"
+
+vs = sorted(Version(s) for s in ["1.10", "1.9.3", "1.2", "2.0"])
+print(vs, Version("1.2") == Version("1.2.0"), len({Version("1"), Version("1.0.0")}))
+```
+:::explain
+Everything flows from **one canonical key**: an int tuple with trailing zeros removed. Tuples compare element by element numerically, so `(1, 10) > (1, 9)`, while plain string sorting would put "1.10" before "1.9". Deriving `__eq__`, `__lt__` and `__hash__` from the same key upholds the contract that equal objects hash equally, and `@total_ordering` fills in `<=`, `>` and `>=`. Since `sorted` is stable, equal versions keep their input order.
+:::complexity
+O(parts) per comparison.
+:::end
+
+:::program medium | Polynomial arithmetic | Real-world task
+Implement `Poly(coeffs)` (`coeffs[i]` is the coefficient of xⁱ, with trailing zeros trimmed) supporting `+`, `*` (with polys and numbers on both sides), `==`, calling `p(x)` (Horner's method), `len(p)` = degree + 1, indexing `p[i]` (0 beyond the degree) and `str` like `3x^2 - x + 5`.
+:::starter
+```python norun
+class Poly:
+    def __init__(self, coeffs):
+        pass
+```
+:::tests
+```python norun
+p = Poly([5, -1, 3])
+assert str(p) == "3x^2 - x + 5" and p(2) == 15 and len(p) == 3 and p[1] == -1 and p[9] == 0
+q = Poly([0, 1])
+assert p + q == Poly([5, 0, 3]) and str(p * q) == "3x^3 - x^2 + 5x"
+assert 2 * p == Poly([10, -2, 6]) and p + 1 == Poly([6, -1, 3]) and 1 + p == p + 1
+assert Poly([1, 2, 0, 0]) == Poly([1, 2]) and str(Poly([0])) == "0"
+assert str(Poly([-1, 0, -1])) == "-x^2 - 1"
+```
+:::solution
+```python
+class Poly:
+    def __init__(self, coeffs):
+        c = list(coeffs) or [0]
+        while len(c) > 1 and c[-1] == 0:
+            c.pop()
+        self.c = c
+    @staticmethod
+    def _wrap(o):
+        return o if isinstance(o, Poly) else Poly([o]) if isinstance(o, (int, float)) else None
+    def __add__(self, o):
+        o = self._wrap(o)
+        if o is None:
+            return NotImplemented
+        n = max(len(self.c), len(o.c))
+        return Poly([self[i] + o[i] for i in range(n)])
+    __radd__ = __add__
+    def __mul__(self, o):
+        o = self._wrap(o)
+        if o is None:
+            return NotImplemented
+        out = [0] * (len(self.c) + len(o.c) - 1)
+        for i, a in enumerate(self.c):
+            for j, b in enumerate(o.c):
+                out[i + j] += a * b
+        return Poly(out)
+    __rmul__ = __mul__
+    def __eq__(self, o):
+        o = self._wrap(o)
+        return o is not None and self.c == o.c
+    __hash__ = None
+    def __call__(self, x):
+        result = 0
+        for a in reversed(self.c):
+            result = result * x + a              # Horner's method
+        return result
+    def __len__(self):
+        return len(self.c)
+    def __getitem__(self, i):
+        return self.c[i] if 0 <= i < len(self.c) else 0
+    def __str__(self):
+        terms = []
+        for i in range(len(self.c) - 1, -1, -1):
+            a = self.c[i]
+            if a == 0:
+                continue
+            mag = abs(a)
+            coef = "" if mag == 1 and i else str(mag)
+            var = "" if i == 0 else "x" if i == 1 else f"x^{i}"
+            terms.append(("-" if a < 0 else "+", coef + var))
+        if not terms:
+            return "0"
+        s = ("-" if terms[0][0] == "-" else "") + terms[0][1]
+        return s + "".join(f" {sg} {t}" for sg, t in terms[1:])
+    def __repr__(self):
+        return f"Poly({self.c})"
+
+p = Poly([5, -1, 3])
+print(p, "|", p * Poly([0, 1]), "|", p(2), "|", 2 * p + 1)
+```
+:::explain
+Each dunder plugs the class into one piece of Python syntax: `+`/`*` (plus their reflected versions for `1 + p`), `==`, calls (`__call__`), `len` and indexing. `__getitem__` returning 0 beyond the degree makes addition trivial, with no padding logic. `_wrap` promotes numbers to constant polynomials so every operator handles mixed types in one place. Normalising in `__init__` keeps `==` honest.
+:::complexity
+`+` O(n), `*` O(n·m), evaluation O(n).
+:::end
+
+:::program hard | Range set with operators | Real-world task
+Implement `RangeSet` storing a set of integers as **sorted, merged half-open intervals** `[start, end)`. Support:
+- `add(start, end)` (merging overlapping or adjacent ranges) and `remove(start, end)` (splitting ranges);
+- `x in rs` in **O(log n)** via `bisect`;
+- `len(rs)` = the number of integers covered;
+- `rs1 | rs2` (union) returning a new RangeSet;
+- iteration over the intervals, `==`, and `repr` like `RangeSet([(1, 5), (10, 12)])`.
+:::starter
+```python norun
+import bisect
+
+class RangeSet:
+    def __init__(self, ranges=()):
+        pass
+```
+:::tests
+```python norun
+r = RangeSet([(1, 5), (10, 12)])
+r.add(5, 7)
+assert list(r) == [(1, 7), (10, 12)]
+assert 6 in r and 7 not in r and 11 in r and 0 not in r
+r.remove(2, 4)
+assert list(r) == [(1, 2), (4, 7), (10, 12)] and len(r) == 1 + 3 + 2
+u = r | RangeSet([(0, 1), (7, 10)])
+assert list(u) == [(0, 2), (4, 12)] and list(r) == [(1, 2), (4, 7), (10, 12)]
+assert RangeSet([(3, 4), (1, 2), (2, 3)]) == RangeSet([(1, 4)])
+assert repr(RangeSet([(1, 5)])) == "RangeSet([(1, 5)])"
+r.remove(0, 100); assert list(r) == [] and len(r) == 0 and 5 not in r
+```
+:::hint
+Keep `self.iv` as a sorted list of non-overlapping tuples. For `add`, collect every interval that touches `[s, e)`, replace them with a single merged interval, and keep the list sorted. For `in`, use `bisect_right` on the start values and check the interval just before.
+:::solution
+```python
+import bisect
+
+class RangeSet:
+    def __init__(self, ranges=()):
+        self.iv = []
+        for s, e in ranges:
+            self.add(s, e)
+
+    def add(self, s, e):
+        if s >= e:
+            return
+        keep, new_s, new_e = [], s, e
+        for a, b in self.iv:
+            if b < new_s or a > new_e:           # disjoint and not adjacent
+                keep.append((a, b))
+            else:                                # overlapping or touching: absorb
+                new_s, new_e = min(new_s, a), max(new_e, b)
+        bisect.insort(keep, (new_s, new_e))
+        self.iv = keep
+
+    def remove(self, s, e):
+        out = []
+        for a, b in self.iv:
+            if b <= s or a >= e:
+                out.append((a, b))
+                continue
+            if a < s:
+                out.append((a, s))               # left piece survives
+            if b > e:
+                out.append((e, b))               # right piece survives
+        self.iv = out
+
+    def __contains__(self, x):
+        i = bisect.bisect_right(self.iv, (x, float("inf"))) - 1
+        return i >= 0 and self.iv[i][0] <= x < self.iv[i][1]
+
+    def __len__(self):
+        return sum(b - a for a, b in self.iv)
+
+    def __iter__(self):
+        return iter(self.iv)
+
+    def __or__(self, other):
+        return RangeSet(self.iv + other.iv)
+
+    def __eq__(self, other):
+        return isinstance(other, RangeSet) and self.iv == other.iv
+
+    def __repr__(self):
+        return f"RangeSet({self.iv})"
+
+r = RangeSet([(1, 5), (10, 12)])
+r.add(5, 7); r.remove(2, 4)
+print(r, 4 in r, 3 in r, len(r), r | RangeSet([(7, 10)]))
+```
+:::explain
+The **class invariant** (intervals sorted, non-overlapping and non-adjacent) is restored after every mutation, so `__contains__` can binary-search: `bisect_right` with the probe `(x, inf)` lands just after the last interval starting at or before x. `remove` splits an interval into up to two pieces. The dunders make the object feel built in: `in`, `len`, iteration, `|` and `==`. Interval sets like this power calendars, memory allocators and IP-range firewalls.
+:::trace
+`add(5, 7)` on [(1, 5), (10, 12)]:
+| interval | touches [5, 7)? | merged so far |
+|---|---|---|
+| (1, 5) | yes (adjacent at 5) | (1, 7) |
+| (10, 12) | no | keep |
+| result | | [(1, 7), (10, 12)] |
+:::complexity
+`in`: O(log n). add/remove: O(n).
 :::end

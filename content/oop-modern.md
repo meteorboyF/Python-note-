@@ -320,6 +320,64 @@ print(p, p.x, p._replace(color="red"), p._asdict())
 | 9 | `order=True` comparing fields you didn't intend | `field(compare=False)` |
 | 10 | Overusing dataclasses for behaviour-heavy classes | regular classes are fine |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+from dataclasses import dataclass, field
+@dataclass
+class Team:
+    name: str
+    members: list = field(default_factory=list)
+a, b = Team("a"), Team("b")
+a.members.append("x")
+print(b.members, a == Team("a", ["x"]))
+```
+What prints?
+- [x] `[] True`
+- [ ] `['x'] True`
+- [ ] `[] False`
+`default_factory=list` calls `list()` **per instance**, so the two teams don't share a list. The generated `__eq__` compares the fields, so a new `Team` with the same values is equal.
+:::
+
+:::quiz
+```python norun
+from enum import Enum
+class Color(Enum):
+    RED = 1
+    CRIMSON = 1
+    BLUE = 2
+print(Color.CRIMSON is Color.RED, len(Color), Color(1).name)
+```
+What prints?
+- [x] `True 2 RED`
+- [ ] `False 3 CRIMSON`
+- [ ] `ValueError`
+A second name with the same value becomes an **alias** of the first member, not a new member. Iteration and `len` skip aliases. Use `@enum.unique` to forbid them.
+:::
+
+:::quiz
+```python norun
+from dataclasses import dataclass
+@dataclass(frozen=True)
+class P:
+    x: int
+    y: int
+s = {P(1, 2), P(1, 2)}
+try:
+    next(iter(s)).x = 5
+except Exception as e:
+    print(len(s), type(e).__name__)
+```
+What prints?
+- [ ] `2 AttributeError`
+- [x] `1 FrozenInstanceError`
+- [ ] `1 TypeError`
+`frozen=True` generates `__hash__` from the fields, so equal points collapse to one set element. Assignment raises `dataclasses.FrozenInstanceError`, which keeps hashed objects safe from mutation.
+:::
+
 ## Practice problems
 
 :::problem basic | Inventory item dataclass | @dataclass, default_factory, methods
@@ -653,4 +711,301 @@ for bad in [lambda: base.with_overrides(batch=100), lambda: TrainConfig.from_dic
 ```
 :::explain
 Frozen dataclasses are **value objects**: immutable, hashable, and compared by value. That makes them perfect as cache keys for experiments. `__post_init__` validates every construction path, **including `replace()`**, which builds a fresh instance. Converting `layers` to a tuple keeps the object hashable even if a caller passes a list. In a frozen class, normal assignment is blocked, so `object.__setattr__` is the sanctioned escape hatch inside `__post_init__`.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Inventory with dataclasses | Real-world task
+Create a dataclass `Item(name: str, price: float, qty: int = 0, tags: list = <independent per item>)` that validates `price >= 0` and `qty >= 0` in `__post_init__`, and has a `total` property. Then `Inventory` with `add(item)`, `value()` and `by_tag(tag)` returning sorted item names.
+:::starter
+```python norun
+from dataclasses import dataclass, field
+
+@dataclass
+class Item:
+    name: str
+    price: float
+    qty: int = 0
+```
+:::tests
+```python norun
+pen = Item("pen", 1.5, 10, ["office"])
+mug = Item("mug", 8.0, 2, ["kitchen", "office"])
+assert pen.total == 15.0 and Item("x", 1).tags == [] and Item("a", 1).tags is not Item("b", 1).tags
+inv = Inventory()
+inv.add(pen); inv.add(mug); inv.add(Item("pan", 20.0, 1, ["kitchen"]))
+assert inv.value() == 51.0
+assert inv.by_tag("office") == ["mug", "pen"] and inv.by_tag("garden") == []
+assert raises(ValueError, Item, "bad", -1)
+assert repr(Item("z", 1.0)) == "Item(name='z', price=1.0, qty=0, tags=[])"
+```
+:::solution
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class Item:
+    name: str
+    price: float
+    qty: int = 0
+    tags: list = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.price < 0 or self.qty < 0:
+            raise ValueError(f"invalid price/qty for {self.name!r}")
+
+    @property
+    def total(self) -> float:
+        return self.price * self.qty
+
+@dataclass
+class Inventory:
+    items: list = field(default_factory=list)
+    def add(self, item: Item):
+        self.items.append(item)
+    def value(self) -> float:
+        return sum(i.total for i in self.items)
+    def by_tag(self, tag: str) -> list:
+        return sorted(i.name for i in self.items if tag in i.tags)
+
+inv = Inventory()
+inv.add(Item("pen", 1.5, 10, ["office"])); inv.add(Item("mug", 8.0, 2, ["office"]))
+print(inv.value(), inv.by_tag("office"), inv.items[0])
+```
+:::explain
+`@dataclass` writes `__init__`, `__repr__` and `__eq__` from the annotated fields. `field(default_factory=list)` is the safe mutable default, and the third test proves every item gets its own list. `__post_init__` runs right after the generated `__init__`, so validation happens at creation. The property isn't a field, so it never goes stale.
+:::complexity
+O(n) for `value` and `by_tag`.
+:::end
+
+:::program medium | Order state machine with Enum | Real-world task
+Model an order lifecycle with `Status(Enum)`: PENDING → PAID → SHIPPED → DELIVERED, and CANCELLED reachable from PENDING or PAID only. A dataclass `Order(id)` has `status` (starting PENDING), `history` (a list of statuses) and `advance(to: Status)`, which raises `ValueError` for illegal transitions. Use a **dict of allowed transitions**, not if-chains.
+:::starter
+```python norun
+from enum import Enum, auto
+from dataclasses import dataclass, field
+
+class Status(Enum):
+    pass
+```
+:::tests
+```python norun
+o = Order(1)
+assert o.status is Status.PENDING
+o.advance(Status.PAID); o.advance(Status.SHIPPED); o.advance(Status.DELIVERED)
+assert o.history == [Status.PENDING, Status.PAID, Status.SHIPPED, Status.DELIVERED]
+assert raises(ValueError, o.advance, Status.CANCELLED)
+o2 = Order(2); o2.advance(Status.CANCELLED)
+assert o2.status is Status.CANCELLED and raises(ValueError, o2.advance, Status.PAID)
+assert "SHIPPED" in str(raises(ValueError, Order(3).advance, Status.SHIPPED))
+assert Order(4).history == [Status.PENDING]
+```
+:::solution
+```python
+from enum import Enum, auto
+from dataclasses import dataclass, field
+
+class Status(Enum):
+    PENDING = auto()
+    PAID = auto()
+    SHIPPED = auto()
+    DELIVERED = auto()
+    CANCELLED = auto()
+
+ALLOWED = {
+    Status.PENDING: {Status.PAID, Status.CANCELLED},
+    Status.PAID: {Status.SHIPPED, Status.CANCELLED},
+    Status.SHIPPED: {Status.DELIVERED},
+    Status.DELIVERED: set(),
+    Status.CANCELLED: set(),
+}
+
+@dataclass
+class Order:
+    id: int
+    status: Status = Status.PENDING
+    history: list = field(default_factory=list)
+
+    def __post_init__(self):
+        self.history.append(self.status)
+
+    def advance(self, to: Status):
+        if to not in ALLOWED[self.status]:
+            raise ValueError(f"cannot go from {self.status.name} to {to.name}")
+        self.status = to
+        self.history.append(to)
+
+o = Order(7)
+o.advance(Status.PAID); o.advance(Status.SHIPPED)
+print(o.status.name, [s.name for s in o.history])
+```
+:::explain
+The **transition table** (a dict mapping a state to its allowed next states) is data, not code. Adding a RETURNED state is one line, and the rules are easy to audit at a glance. Enum members are unique singletons, so `is` comparisons are safe, and a typo like `Status.SHIPED` fails immediately with `AttributeError` instead of silently comparing unequal strings.
+:::complexity
+O(1) per transition.
+:::end
+
+:::program medium | Typed protocol plugin registry | Real-world task
+Define a `runtime_checkable` `Protocol` called `Formatter` with `name: str` and `format(value) -> str`. Write `Registry` with `register(obj)`, which rejects objects not satisfying the protocol with `TypeError` (and duplicates by name with `ValueError`), and `render(value, name)`. Implement `UpperFormatter`, `MoneyFormatter` (`1234.5` → `"$1,234.50"`) and `JsonFormatter`, **without** inheriting from `Formatter`.
+:::starter
+```python norun
+import json
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class Formatter(Protocol):
+    name: str
+    def format(self, value) -> str: ...
+```
+:::tests
+```python norun
+r = Registry()
+for f in (UpperFormatter(), MoneyFormatter(), JsonFormatter()): r.register(f)
+assert r.render("hi", "upper") == "HI"
+assert r.render(1234.5, "money") == "$1,234.50"
+assert r.render({"b": 1, "a": [1, 2]}, "json") == '{"a": [1, 2], "b": 1}'
+assert raises(TypeError, r.register, object())
+assert raises(ValueError, r.register, UpperFormatter())
+assert raises(KeyError, r.render, 1, "nope")
+assert isinstance(MoneyFormatter(), Formatter) and not issubclass(MoneyFormatter, Registry)
+```
+:::solution
+```python
+import json
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class Formatter(Protocol):
+    name: str
+    def format(self, value) -> str: ...
+
+class UpperFormatter:
+    name = "upper"
+    def format(self, value) -> str:
+        return str(value).upper()
+
+class MoneyFormatter:
+    name = "money"
+    def format(self, value) -> str:
+        return f"${value:,.2f}"
+
+class JsonFormatter:
+    name = "json"
+    def format(self, value) -> str:
+        return json.dumps(value, sort_keys=True)
+
+class Registry:
+    def __init__(self):
+        self._by_name: dict[str, Formatter] = {}
+    def register(self, obj: Formatter) -> None:
+        if not isinstance(obj, Formatter):
+            raise TypeError(f"{type(obj).__name__} does not implement Formatter")
+        if obj.name in self._by_name:
+            raise ValueError(f"duplicate formatter {obj.name!r}")
+        self._by_name[obj.name] = obj
+    def render(self, value, name: str) -> str:
+        return self._by_name[name].format(value)
+
+r = Registry()
+for f in (UpperFormatter(), MoneyFormatter(), JsonFormatter()):
+    r.register(f)
+print(r.render(1234.5, "money"), r.render({"z": 1, "a": 2}, "json"))
+```
+:::explain
+A `Protocol` describes a **shape** (attributes + methods). Classes satisfy it **structurally**, just by having those members, with no inheritance needed. `@runtime_checkable` enables `isinstance` checks at run time (it checks that the members exist, not their exact types), and static checkers like mypy verify signatures too. This is how plugin systems accept third-party classes they've never seen.
+:::complexity
+O(1) per register/render.
+:::end
+
+:::program hard | Priority job queue with dataclass ordering | Real-world task
+Build `JobQueue` backed by `heapq` with jobs as `@dataclass(order=True)` objects ordered by `(priority, seq)`, where `seq` is an auto-increment tie-breaker so equal priorities are FIFO. The payload must be **excluded** from comparison (payloads may be unorderable dicts). Support `push(payload, priority)`, `pop()`, `peek()`, `__len__`, `cancel(job_id)` (lazy deletion), and `push` returning a job id.
+:::starter
+```python norun
+import heapq, itertools
+from dataclasses import dataclass, field
+
+@dataclass(order=True)
+class Job:
+    pass
+```
+:::tests
+```python norun
+q = JobQueue()
+a = q.push({"task": "email"}, priority=2)
+b = q.push({"task": "backup"}, priority=1)
+c = q.push({"task": "report"}, priority=2)
+d = q.push({"task": "urgent"}, priority=0)
+assert len(q) == 4 and q.peek()["task"] == "urgent"
+q.cancel(b)
+assert len(q) == 3
+assert [q.pop()["task"] for _ in range(3)] == ["urgent", "email", "report"]
+assert len(q) == 0 and raises(IndexError, q.pop)
+assert raises(KeyError, q.cancel, 999)
+```
+:::hint
+Keep a dict `job_id → Job` plus a `cancelled` flag on each Job. `cancel` only sets the flag. `pop`/`peek` discard cancelled jobs when they surface at the heap's top. Track the live count separately for `len`.
+:::solution
+```python
+import heapq, itertools
+from dataclasses import dataclass, field
+
+@dataclass(order=True)
+class Job:
+    priority: int
+    seq: int
+    payload: object = field(compare=False)
+    cancelled: bool = field(default=False, compare=False)
+
+class JobQueue:
+    def __init__(self):
+        self._heap = []
+        self._jobs = {}
+        self._counter = itertools.count()
+        self._live = 0
+
+    def push(self, payload, priority=0):
+        job = Job(priority, next(self._counter), payload)
+        heapq.heappush(self._heap, job)
+        self._jobs[job.seq] = job
+        self._live += 1
+        return job.seq
+
+    def cancel(self, job_id):
+        job = self._jobs.pop(job_id)           # KeyError for unknown/finished ids
+        job.cancelled = True                   # lazy deletion: leave it in the heap
+        self._live -= 1
+
+    def _clean_top(self):
+        while self._heap and self._heap[0].cancelled:
+            heapq.heappop(self._heap)
+
+    def peek(self):
+        self._clean_top()
+        if not self._heap:
+            raise IndexError("peek at empty queue")
+        return self._heap[0].payload
+
+    def pop(self):
+        self._clean_top()
+        if not self._heap:
+            raise IndexError("pop from empty queue")
+        job = heapq.heappop(self._heap)
+        del self._jobs[job.seq]
+        self._live -= 1
+        return job.payload
+
+    def __len__(self):
+        return self._live
+
+q = JobQueue()
+ids = [q.push({"n": n}, p) for n, p in [("a", 2), ("b", 1), ("c", 2)]]
+q.cancel(ids[1])
+print(len(q), q.pop(), q.pop(), len(q))
+```
+:::explain
+`order=True` generates comparisons from the fields **in declaration order**, `(priority, seq)`, while `compare=False` keeps payloads and flags out of it, so two dicts are never compared (which would raise TypeError). The monotonic `seq` gives FIFO among equal priorities. **Lazy deletion** avoids an O(n) search-and-reheapify on `cancel`: the job is flagged and silently discarded when it reaches the top, which keeps every operation O(log n).
+:::complexity
+push/pop O(log n), cancel O(1), peek amortised O(log n).
 :::end
