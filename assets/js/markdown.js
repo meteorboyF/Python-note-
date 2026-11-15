@@ -24,7 +24,7 @@
 // (expected to raise), ```python plot (draws a figure), ```output, ```text.
 (function () {
   const CALLOUTS = {
-    tip: "Tip", trap: "Trap", note: "Note", deep: "Deep dive", term: "Term", analogy: "Think of it like", boss: "Boss move",
+    tip: "Tip", trap: "Trap", trace: "Manual trace", note: "Note", deep: "Deep dive", term: "Term", analogy: "Think of it like", boss: "Boss move",
   };
   const SECTIONS = {
     hint: "💡 Hint", solution: "✅ Solution", explain: "🧠 Explanation", trace: "👣 Manual trace (step by step)",

@@ -263,6 +263,7 @@ td code { white-space: nowrap; }
 .callout.trap { border-left-color: var(--red); background: var(--red-soft); } .callout.trap .ic { background: var(--red); }
 .callout.note { border-left-color: var(--ink-3); } .callout.note .ic { background: var(--ink-3); }
 .callout.deep { border-left-color: var(--choc); background: var(--surface-2); } .callout.deep .ic { background: var(--choc); }
+.callout.trace { border-left-color: var(--gold); } .callout.trace .ic { background: var(--gold); }
 .callout.term { border-left-color: #7A4A9A; } .callout.term .ic { background: #7A4A9A; }
 .callout.analogy { border-left-color: var(--green); background: var(--green-soft); } .callout.analogy .ic { background: var(--green); }
 .callout.boss { border-left-color: var(--red); background: linear-gradient(135deg, var(--surface), var(--gold-soft)); } .callout.boss .ic { background: var(--ink); }
