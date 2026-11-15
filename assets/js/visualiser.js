@@ -11,7 +11,7 @@
   function emitStatus(msg) { statusListeners.forEach(fn => fn(msg)); }
   function getWorker() {
     if (worker) return worker;
-    worker = new Worker("assets/js/tracer-worker.js?v=5", { type: "module" });
+    worker = new Worker("assets/js/tracer-worker.js?v=6", { type: "module" });
     ready = false;
     worker.onmessage = (e) => {
       const m = e.data;
@@ -61,7 +61,9 @@
       case "dict": return (o.c !== "dict" ? o.c : "") + "{" + items.map(([k, v]) => `${short(k, heap, depth + 1)}: ${short(v, heap, depth + 1)}`).join(", ") + (o.more ? ", …" : "") + "}";
       case "obj": return o.cls ? o.c : `${o.c}(${items.map(([k, v]) => `${k}=${short(v, heap, depth + 1)}`).join(", ")})`;
       case "func": return `function ${o.s}`;
-      default: return o.s.split("\n")[0].slice(0, 60);
+      case "grid": return o.d === 2 ? `[${o.v.map(r => `[${r.join(" ")}]`).join(" ")}]` : `[${(o.v[0] || []).join(" ")}]`;
+      case "table": return `${o.c}`;
+      default: return String(o.s || o.c || "").split("\n")[0].slice(0, 60);
     }
   }
   const clip = (s, n = 60) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
@@ -228,47 +230,31 @@
     else if (K.k === "except") head = `🧯 The exception matched this <code>except</code>, so the handler runs.`;
     else if (K.k === "with") head = `🚪 <code>with</code> called <code>__enter__</code> on the context manager. <code>__exit__</code> is guaranteed to run when the block ends.`;
     // effects
+    const sf = top && s.f.find(f => f.id === top.id);
+    const refOf = k => { const x = sf && sf.v.find(([kk]) => kk === k); return x && x[1][0] === "R" ? x[1][1] : null; };
+    const mutatedRefs = new Set();
     for (const d of diffs) {
       if (K.k === "for" && outcome === "item" && d.kind !== "mutated") continue;
+      if (d.kind === "mutated") {
+        if (mutatedRefs.has(d.ref)) continue;
+        mutatedRefs.add(d.ref);
+        const names = sf.v.filter(([, v]) => v[0] === "R" && v[1] === d.ref).map(([k]) => `<code>${esc(k)}</code>`);
+        fx.push(`🛠️ The object was changed <b>in place</b>: <code>${esc(clip(d.old, 34))}</code> → <code>${esc(clip(d.now, 34))}</code>.${names.length > 1 ? ` ${names.join(" and ")} all point to it, so they <b>all</b> see the change.` : ` (${names[0] || ""} still points to the same object.)`}`);
+        continue;
+      }
+      if ((d.kind === "new" || d.kind === "rebound" || d.kind === "changed") && refOf(d.k) != null) {
+        const others = sf.v.filter(([k, v]) => k !== d.k && v[0] === "R" && v[1] === refOf(d.k)).map(([k]) => `<code>${esc(k)}</code>`);
+        if (others.length && !isCallableTxt(d.now || "")) { fx.push(`🔗 <code>${esc(d.k)}</code> now points to the <b>same object</b> as ${others.join(", ")} (no copy was made): <code>${esc(clip(d.now, 40))}</code>`); continue; }
+      }
       if (isCallableTxt(d.now || "") && (K.k === "def" || K.k === "class" || K.k === "decorator")) continue;
       if (d.kind === "new") fx.push(`🆕 new name <code>${esc(d.k)}</code> → <code>${esc(clip(d.now, 50))}</code>`);
       else if (d.kind === "changed") fx.push(`✏️ <code>${esc(d.k)}</code>: <code>${esc(clip(d.old, 30))}</code> → <code>${esc(clip(d.now, 30))}</code>`);
       else if (d.kind === "rebound") fx.push(`🔀 <code>${esc(d.k)}</code> now refers to a <b>different object</b>: <code>${esc(clip(d.now, 40))}</code>`);
-      else if (d.kind === "mutated") {
-        const also = top.v.filter(([k, v]) => k !== d.k && v[0] === "R" && v[1] === d.ref).map(([k]) => `<code>${esc(k)}</code>`);
-        fx.push(`🛠️ <code>${esc(d.k)}</code> was changed <b>in place</b> (same object): <code>${esc(clip(d.old, 34))}</code> → <code>${esc(clip(d.now, 34))}</code>${also.length ? `. ${also.join(", ")} see${also.length === 1 ? "s" : ""} it too (same object!)` : ""}`);
-      }
       else if (d.kind === "deleted") fx.push(`🗑️ <code>${esc(d.k)}</code> was deleted`);
     }
     if (printed) fx.push(`🖨️ printed <code>${esc(clip(printed.replace(/\n$/, "").replace(/\n/g, "⏎"), 70))}</code>`);
     if (!head) head = fx.length ? "" : `Ran it. Nothing visible changed (no variable or output changed).`;
     return { head, fx, kind: K.k, outcome, diffs, printed };
-  }
-
-  function narrate(steps, i, lines, result) {
-    const s = steps[i];
-    const lineHTML = n => `<code>${esc(clip((lines[n - 1] || "").trim(), 70))}</code>`;
-    let html = "";
-    if (i === 0) {
-      html += `<div class="nr-now"><span class="tag start">▶ start</span>The program is ready and nothing has run yet. Press <b>Next ▶</b> (or <kbd>→</kbd>) to run the highlighted line.</div>`;
-    } else {
-      const p = steps[i - 1];
-      const ef = effectOf(steps, i, lines, result.stdout);
-      const label = p.e === "call" ? "entered" : p.e === "return" ? "returned" : p.e === "exception" ? "error" : "just ran";
-      html += `<div class="nr-now"><span class="tag done">✔ ${label} · line ${p.l}</span>${p.e === "line" ? lineHTML(p.l) : ""}
-        ${ef.head ? `<div class="nr-head">${ef.head}</div>` : ""}${ef.fx.length ? `<ul class="nr-fx">${ef.fx.slice(0, 6).map(x => `<li>${x}</li>`).join("")}${ef.fx.length > 6 ? `<li>…and ${ef.fx.length - 6} more</li>` : ""}</ul>` : ""}</div>`;
-    }
-    const last = i === steps.length - 1;
-    if (last) {
-      html += result.error
-        ? `<div class="nr-next end err"><span class="tag stop">🛑 stopped</span>The program crashed with <b>${esc(result.error)}</b>${result.errLine ? ` on line ${result.errLine}` : ""}.</div>`
-        : result.truncated ? `<div class="nr-next end"><span class="tag stop">⏸ trace limit</span>Stopped after ${steps.length} steps to keep things readable. The <b>Output</b> tab has the complete result.</div>`
-        : `<div class="nr-next end"><span class="tag fin">🏁 finished</span>The program ran to the end.</div>`;
-    } else {
-      const ev = topOf(s) && topOf(s).k === "class" && s.e !== "line" ? (s.e === "call" ? `about to run the body of class <b>${esc(topOf(s).n)}</b>` : `class body of <b>${esc(topOf(s).n)}</b> is about to finish`) : s.e === "call" ? `about to enter <b>${esc(topOf(s).n)}()</b>` : s.e === "return" ? `<b>${esc(topOf(s) ? topOf(s).n : "")}()</b> is about to return` : s.e === "exception" ? "an exception is propagating" : "runs next";
-      html += `<div class="nr-next"><span class="tag next">➜ line ${s.l}</span>${s.e === "line" ? lineHTML(s.l) + " " : ""}<span class="muted">${ev}</span></div>`;
-    }
-    return html;
   }
 
   // ---------------- the line-by-line breakdown ----------------
@@ -310,9 +296,9 @@
       if (r.errLine === n && r.error) bits.push(`<span class="bd-err">💥 ${esc(r.error)}</span>`);
       const never = !L.runs && !L.rets.length && !(r.errLine === n);
       const runs = L.runs > 1 ? `<span class="runs hot">${L.runs}×</span>` : L.runs ? `<span class="runs">1×</span>` : `<span class="runs zero">0×</span>`;
-      return `<tr class="${never ? "never" : ""}"><td class="ln">${n}</td><td class="src"><code>${esc(src)}</code></td><td>${runs}</td><td class="what">${never ? `<span class="muted">${/^(else|finally)\b/.test(t) ? "branch marker (no step of its own)" : "never ran"}</span>` : bits.join("<br>") || `<span class="muted">ran</span>`}</td></tr>`;
+      return `<tr class="${never ? "never" : ""}"><td class="ln">${n}</td><td class="src"><code>${esc(src)}</code>${(r.stx && r.stx[String(n)] || []).map(x => `<div class="bd-note">📖 ${esc(x)}</div>`).join("")}</td><td>${runs}</td><td class="what">${never ? `<span class="muted">${/^(else|finally)\b/.test(t) ? "branch marker (no step of its own)" : "never ran"}</span>` : bits.join("<br>") || `<span class="muted">ran</span>`}</td></tr>`;
     }).join("");
-    return `<p class="bd-help">Every line, how many times it ran, and what it did: values each name took (in order), branch decisions and printed text.${r.truncated ? ` <b>Only the first ${steps.length} steps are counted.</b>` : ""}</p>
+    return `<p class="bd-help">Every line with what its syntax means (📖), how many times it ran, and what it did: values each name took (in order), branch decisions and printed text.${r.truncated ? ` <b>Only the first ${steps.length} steps are counted.</b>` : ""}</p>
       <div class="bd-wrap"><table class="bd"><thead><tr><th>#</th><th>Code</th><th>Ran</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
@@ -323,11 +309,12 @@
     return `<span class="ptr ${cls}" data-to="${enc[1]}" title="reference to object #${enc[1]}"></span>`;
   }
 
-  function renderObj(h, o, fresh) {
+  function renderObj(h, o, fresh, prev) {
     const head = `<div class="oh">${esc(o.c)} <span class="muted">#${h}</span></div>`;
     const cls = `vz-obj ${o.t}${o.cls ? "" : o.t === "obj" ? " instance" : ""}${fresh ? " fresh" : ""}`;
     if (o.t === "grid") {
-      const rows = o.v.map((r, i) => `<tr>${o.d === 2 ? `<th>${i}</th>` : ""}${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("");
+      const pv = prev && prev.t === "grid" && prev.v.length === o.v.length ? prev.v : null;
+      const rows = o.v.map((r, i) => `<tr>${o.d === 2 ? `<th>${i}</th>` : ""}${r.map((x, j) => `<td class="${pv && pv[i] && pv[i][j] !== x ? "chg" : ""}">${esc(x)}</td>`).join("")}</tr>`).join("");
       const hdr = `<tr>${o.d === 2 ? "<th></th>" : ""}${(o.v[0] || []).map((_, j) => `<th>${j}</th>`).join("")}</tr>`;
       return `<div class="${cls}" id="o-${h}">${head}<div class="box gridbox"><table>${hdr}${rows}</table></div></div>`;
     }
@@ -413,81 +400,108 @@
   }
 
   // ---------------- the component ----------------
+  // One step = one line being executed. The highlighted line is the one that RUNS in
+  // this step; memory and output show the state right AFTER it ran; the step card
+  // explains what it did, how each piece of it was evaluated, and the syntax used.
+  const hlLine = l => { try { return hljs.highlight(l, { language: "python", ignoreIllegals: true }).value; } catch (e) { return esc(l); } };
+
+  function selView(sel) {
+    const pk = new Set(sel.pick || []);
+    if (sel.k === "grid") {
+      const cols = sel.cells[0] ? sel.cells[0].length : 0; let n = 0;
+      const head = `<tr><th></th>${Array.from({ length: cols }, (_, j) => `<th>${j}</th>`).join("")}</tr>`;
+      const rows = sel.cells.map((r, i) => `<tr><th>${sel.d === 2 ? i : ""}</th>${r.map(x => `<td class="${pk.has(n++) ? "pk" : ""}">${esc(x)}</td>`).join("")}</tr>`).join("");
+      return `<table class="sel grid">${head}${rows}</table>`;
+    }
+    if (sel.k === "seq") {
+      return `<div class="sel seq">${sel.items.map((x, i) => `<div class="sq${pk.has(i) ? " pk" : ""}"><span class="sv">${esc(sel.str ? (x === " " ? "␣" : x) : x)}</span><span class="si">${i}</span><span class="sn">${i - sel.items.length}</span></div>`).join("")}</div>`;
+    }
+    if (sel.k === "dict") {
+      return `<table class="sel dict">${sel.items.map((k, i) => `<tr class="${pk.has(i) ? "pk" : ""}"><td>${esc(k)}</td><td>${esc(sel.vals[i])}</td></tr>`).join("")}</table>`;
+    }
+    if (sel.k === "df") {
+      let n = 0;
+      return `<table class="sel df"><tr><th></th>${sel.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>${sel.rows.map((r, i) => `<tr><th>${esc(sel.idx[i])}</th>${r.map(x => `<td class="${pk.has(n++) ? "pk" : ""}">${esc(x)}</td>`).join("")}</tr>`).join("")}</table>`;
+    }
+    return "";
+  }
+  function valView(v) {
+    if (!v) return "";
+    if (v[0] === "g") return `<table class="sel grid res">${v[1].map(r => `<tr>${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("")}</table>`;
+    if (v[0] === "p") return `<pre class="ev-pre">${esc(v[1])}</pre>`;
+    return `<code class="ev-val">${esc(v[1])}</code>`;
+  }
+
   class Visualiser {
     constructor(host, { onStatus, inline, stack, onResult } = {}) {
       this.host = host; this.onStatus = onStatus || (() => {}); this.inline = inline; this.stack = stack; this.onResult = onResult || (() => {});
       this.steps = []; this.i = 0; this.code = ""; this.result = null; this.playing = null; this.editing = false; this.stdin = "";
-      this.view = "mem"; this.predict = false; this.score = { right: 0, total: 0 }; this.answered = new Set();
+      this.quiz = false; this.score = { right: 0, total: 0 }; this.showTable = false; this.explaining = null;
       this._onResize = () => this.canvas && drawArrows(this.canvas);
       window.addEventListener("resize", this._onResize);
     }
     destroy() { this.pause(); window.removeEventListener("resize", this._onResize); }
 
     async load(code) {
-      this.code = code.replace(/\s+$/, "") + "\n"; this.pause();
-      this._traceHTML = null; this.answered = new Set(); this.score = { right: 0, total: 0 };
+      this.code = code.replace(/\s+$/, "") + "\n"; this.pause(); this._traceHTML = null;
       this.host.innerHTML = `<div class="vz-loading"><div><div class="spinner"></div><b>Warming up the oven…</b><p class="muted" id="vzLoadMsg">${ready ? "Tracing your code" : "Loading Python in your browser (about 10 MB, first time only; cached afterwards)"}</p></div></div>`;
       const msgEl = this.host.querySelector("#vzLoadMsg");
       const listener = m => { if (msgEl) msgEl.textContent = m; this.onStatus(m); };
       statusListeners.add(listener);
       try {
-        this.result = await execute(this.code, "trace", this.stdin);
-        this.steps = this.result.steps;
-        this.onResult(this.result, this.code);
-        if (!this.steps.length) this.steps = [{ l: this.result.errLine || 1, e: "line", f: [], h: {}, o: this.result.stdout.length }];
-        this.i = 0; this.render();
-        this.onStatus(`${this.steps.length} steps${this.result.truncated ? " (stopped early: step limit reached)" : ""}${this.result.error ? " · ends with an error" : ""}`);
+        const r = await execute(this.code, "trace", this.stdin);
+        this.onResult(r, this.code);
+        this.setResult(r);
+        this.onStatus(`${this.steps.length} steps${r.truncated ? " (stopped early: step limit reached)" : ""}${r.error ? " · ends with an error" : ""}`);
       } catch (err) {
         this.host.innerHTML = `<div class="vz-loading"><div><b>Couldn't run this code</b><p class="muted">${esc(err.message)}</p><button class="btn small" id="vzRetry">Try again</button></div></div>`;
         this.host.querySelector("#vzRetry").onclick = () => this.load(this.code);
       } finally { statusListeners.delete(listener); }
     }
-
-    // show a trace that was computed ahead of time (no Python download needed)
-    loadResult(code, result) {
-      this.code = code.replace(/\s+$/, "") + "\n"; this.pause();
-      this._traceHTML = null; this.answered = new Set(); this.score = { right: 0, total: 0 };
-      this.result = undelta(result);
-      this.steps = this.result.steps.length ? this.result.steps : [{ l: this.result.errLine || 1, e: "line", f: [], h: {}, o: this.result.stdout.length }];
+    loadResult(code, result) { this.code = code.replace(/\s+$/, "") + "\n"; this.pause(); this.setResult(undelta(result)); }
+    setResult(r) {
+      this.result = r; this.ex = r.ex || []; this.stx = r.stx || {};
+      this.steps = r.steps.length ? r.steps : [{ l: r.errLine || 1, e: "line", f: [], h: {}, o: r.stdout.length }];
+      this._traceHTML = null; this.score = { right: 0, total: 0 }; this.explaining = null;
       this.i = 0; this.render();
     }
 
     render() {
       const lines = this.code.split("\n"); if (lines.at(-1) === "") lines.pop();
       this.lines = lines;
+      const runs = new Map(); this.steps.forEach(s => s.e === "line" && runs.set(s.l, (runs.get(s.l) || 0) + 1));
       this.host.innerHTML = `<div class="vz${this.stack ? " stack" : ""}">
         <div class="vz-left">
           ${this.editing
             ? `<textarea class="vz-edit" spellcheck="false">${esc(this.code)}</textarea>
-               <div class="vz-controls"><div class="row"><button class="primary" data-a="rerun">▶ Run &amp; visualise</button><span class="muted" style="font-size:.8rem">Tab inserts 4 spaces</span></div>
-               <label style="font-size:.8rem;color:var(--ink-3)">Input lines for <code>input()</code> (one per line)</label><textarea class="vz-stdin" rows="2" style="font:12px var(--font-mono);border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:6px">${esc(this.stdin)}</textarea></div>`
-            : `<div class="vz-code">${lines.map((l, n) => `<div class="vz-line" data-n="${n + 1}"><span class="ar">➜</span><span class="ln">${n + 1}</span><span>${l ? esc(l) : " "}</span></div>`).join("")}</div>
-               <div class="vz-legend"><span><b class="r">➜</b> line about to run</span><span><b class="g">➜</b> line just ran</span><span><span class="ptr"></span> reference (points to an object)</span></div>
-               <div class="vz-narr"></div>
+               <div class="vz-controls"><div class="row"><button class="primary" data-a="rerun">▶ Run &amp; visualise</button><span class="muted" style="font-size:.8rem">Tab inserts 4 spaces · Ctrl+Enter runs</span></div>
+               <label style="font-size:.8rem;color:var(--ink-3)">Input lines for <code>input()</code> (one per line)</label><textarea class="vz-stdin" rows="2">${esc(this.stdin)}</textarea></div>`
+            : `<div class="vz-code" title="Click a line to see what its syntax means">${lines.map((l, n) => `<div class="vz-line${runs.has(n + 1) ? "" : " dead"}" data-n="${n + 1}"><span class="ln">${n + 1}</span><span class="tx">${l ? hlLine(l) : " "}</span></div>`).join("")}</div>
                <div class="vz-controls">
                  <div class="row">
-                   <button data-a="first" title="First step (Home)">⏮</button><button data-a="prev" title="Previous (←)">◀ Prev</button>
-                   <button class="primary" data-a="next" title="Next (→)">Next ▶</button><button data-a="last" title="Last step (End)">⏭</button>
+                   <button data-a="first" title="First step (Home)">⏮</button><button data-a="prev" title="Previous step (←)">◀ Prev</button>
+                   <button class="primary" data-a="next" title="Next step (→)">Next ▶</button><button data-a="last" title="Last step (End)">⏭</button>
                    <button data-a="play" title="Auto-play (space)">⏵ Play</button>
-                   <select data-a="speed" title="Play speed"><option value="1100">Slow</option><option value="600" selected>Normal</option><option value="250">Fast</option></select>
+                   <select data-a="speed" title="Play speed"><option value="1400">Slow</option><option value="800" selected>Normal</option><option value="350">Fast</option></select>
                    <span class="count"></span>
                  </div>
                  <input type="range" min="0" max="${this.steps.length - 1}" value="0" aria-label="Step slider">
-               </div>`}
+                 <div class="row extras">
+                   <button data-a="quiz" class="${this.quiz ? "on" : ""}" title="Predict values/output before each step is revealed">🎯 Quiz me${this.quiz ? ` · ${this.score.right}/${this.score.total}` : ""}</button>
+                   <button data-a="table" class="${this.showTable ? "on" : ""}" title="The hand-trace table: one row per step">📋 Trace table</button>
+                   <span class="muted hint">Tip: click any code line to see what it means</span>
+                 </div>
+               </div>
+               <div class="vz-step" aria-live="polite"></div>`}
         </div>
         <div class="vz-right">
-          ${this.editing ? "" : `<div class="vz-tabs">
-            <button data-view="mem" class="${this.view === "trace" ? "" : "on"}">🧠 Memory</button>
-            <button data-view="trace" class="${this.view === "trace" ? "on" : ""}">📋 Trace table</button>
-            <span class="sp"></span>
-            <button data-a="predict" class="${this.predict ? "on" : ""}" title="Guess each variable's next value before it is revealed">🎯 Predict mode${this.predict ? ` · ${this.score.right}/${this.score.total}` : ""}</button>
-          </div>
-          <div class="vz-trace" ${this.view === "trace" ? "" : "hidden"}></div>`}
-          <div class="vz-canvas" ${this.view === "trace" ? "hidden" : ""}><svg class="arrows"></svg>
+          <div class="vz-trace" ${this.showTable && !this.editing ? "" : "hidden"}></div>
+          <div class="vz-memh">🧠 Memory <span class="muted">after this step · names on the left point to objects on the right</span></div>
+          <div class="vz-canvas"><svg class="arrows"></svg>
             <div class="vz-col"><h4>Frames (names)</h4><div class="vz-frames"></div></div>
-            <div class="vz-col"><h4>Objects (values in memory)</h4><div class="vz-heap"></div></div>
+            <div class="vz-col"><h4>Objects</h4><div class="vz-heap"></div></div>
           </div>
-          <div class="vz-out"><h4>Output</h4><pre></pre><div class="figs"></div></div>
+          <div class="vz-out"><h4>Console output</h4><pre></pre><div class="figs"></div></div>
         </div></div>`;
       this.canvas = this.host.querySelector(".vz-canvas");
       this.host.querySelectorAll("[data-a]").forEach(b => {
@@ -495,13 +509,7 @@
         if (a === "speed") b.onchange = () => { if (this.playing) { this.pause(); this.play(); } };
         else b.onclick = () => this.act(a);
       });
-      this.host.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
-        this.view = b.dataset.view;
-        this.host.querySelectorAll("[data-view]").forEach(x => x.classList.toggle("on", x === b));
-        this.host.querySelector(".vz-trace").hidden = this.view !== "trace";
-        this.canvas.hidden = this.view === "trace";
-        this.go(this.i);
-      });
+      this.host.querySelectorAll(".vz-line").forEach(el => el.onclick = () => this.explainLine(+el.dataset.n));
       const range = this.host.querySelector("input[type=range]");
       if (range) range.oninput = () => this.go(+range.value);
       const ta = this.host.querySelector(".vz-edit");
@@ -510,102 +518,169 @@
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.act("rerun"); }
       });
       this.canvas.addEventListener("scroll", () => drawArrows(this.canvas));
-      this.go(this.i);
+      if (!this.editing) this.go(this.i);
     }
 
-    // ---- manual-trace assist: predict mode ----
-    questionFor(i) {
-      const s = this.steps[i], n = this.steps[i + 1];
-      if (!s || !n || !n.f.length) return [];
-      const top = n.f[n.f.length - 1];
-      const before = s.f.find(f => f.id === top.id);
-      if (!before) return [];                                    // a brand-new call: nothing to predict yet
-      const old = new Map(before.v.map(([k, v]) => [k, short(v, s.h)]));
-      return top.v.map(([k, v]) => ({ k, now: short(v, n.h), was: old.get(k) }))
-        .filter(q => q.now !== q.was && !/^(function|class) /.test(q.now)).slice(0, 3);
+    // ---- the step card ----
+    evalHTML(s) {
+      const evs = (s.ev || []).filter(e => this.ex[e[0]]);
+      if (!evs.length) return "";
+      const seen = new Set();
+      const cards = evs.map(([id, val, sel]) => {
+        const t = this.ex[id]; const first = t.d && !seen.has(t.d); seen.add(t.d);
+        return `<div class="ev${sel ? " has-sel" : ""}"><div class="ev-h"><code class="ev-src">${hlLine(t.s)}</code><span class="ev-arrow">→</span>${valView(val)}</div>
+          ${sel ? `<div class="ev-sel">${selView(sel)}<div class="ev-why">📍 ${esc(sel.why)}</div></div>` : ""}
+          ${t.d && first ? `<div class="ev-doc">${esc(t.d)}</div>` : ""}</div>`;
+      });
+      return `<div class="sc-sec"><h5>🔍 How Python worked it out <span class="muted">(inner pieces first, in the order they ran)</span></h5><div class="evs">${cards.join("")}</div></div>`;
     }
-    showPredict(qs) {
-      const narr = this.host.querySelector(".vz-narr"); if (!narr) return;
-      const s = this.steps[this.i];
-      narr.innerHTML = `<div class="predict"><b>🎯 Your turn.</b> Line ${s.l} <code>${esc(clip((this.lines[s.l - 1] || "").trim(), 60))}</code> runs next. Predict:
-        ${qs.map((q, j) => `<label><code>${esc(q.k)}</code>${q.was === undefined ? " (new)" : ` (now <code>${esc(clip(q.was, 24))}</code>)`} → <input data-q="${j}" spellcheck="false" autocomplete="off" placeholder="value"></label>`).join("")}
-        <div class="row"><button class="primary" data-p="check">Check</button><button data-p="skip">Skip</button></div></div>`;
-      const inputs = narr.querySelectorAll("input");
-      inputs[0]?.focus();
-      const norm = x => String(x).trim().replace(/\s+/g, "").replace(/^['"](.*)['"]$/, "$1").toLowerCase();
-      const same = (a, b) => norm(a) === norm(b) || (!isNaN(parseFloat(a)) && !isNaN(parseFloat(b)) && Math.abs(parseFloat(a) - parseFloat(b)) < 1e-9 && /^[-\d.e+]+$/i.test(norm(a)));
-      const finish = (checked) => {
-        this.answered.add(this.i);
-        let html = "";
-        if (checked) {
-          qs.forEach((q, j) => {
-            const ok = same(inputs[j].value, q.now);
-            this.score.total++; if (ok) this.score.right++;
-            html += `<div>${ok ? "✅" : "❌"} <code>${esc(q.k)}</code> = <code>${esc(clip(q.now, 50))}</code>${ok ? "" : ` (you said <code>${esc(inputs[j].value || "nothing")}</code>)`}</div>`;
-          });
-        }
-        narr.innerHTML = `<div class="predict">${html}<div class="row"><button class="primary" data-p="go">Continue ▶</button><span class="muted">Score ${this.score.right}/${this.score.total}</span></div></div>`;
-        const pb = this.host.querySelector("[data-a=predict]"); if (pb) pb.textContent = `🎯 Predict mode · ${this.score.right}/${this.score.total}`;
-        narr.querySelector("[data-p=go]").onclick = () => this.go(this.i + 1);
-        narr.querySelector("[data-p=go]").focus();
-      };
-      narr.querySelector("[data-p=check]").onclick = () => finish(true);
-      narr.querySelector("[data-p=skip]").onclick = () => finish(false);
-      inputs.forEach(inp => inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); finish(true); } e.stopPropagation(); }));
+    stepCard(i) {
+      const st = this.steps, s = st[i], N = st.length, last = i === N - 1, r = this.result;
+      const top = topOf(s);
+      const lineCode = (this.lines[s.l - 1] || "").trim();
+      const isEnd = last && (s.e === "return" && st.length > 1 && s.f.length <= 1 || !st[i + 1]);
+      let title, kind = "";
+      if (s.e === "call") title = top && top.k === "class" ? `🏗️ Running the body of class <b>${esc(top.n)}</b>` : `📞 Entering <b>${esc(top ? top.n : "?")}()</b>`;
+      else if (s.e === "return" && s.f.length > 1) title = top && top.k === "class" ? `🏗️ Class <b>${esc(top.n)}</b> is complete` : `↩️ <b>${esc(top ? top.n : "?")}()</b> returns`;
+      else if (s.e === "exception") { title = `💥 An exception is raised`; kind = " bad"; }
+      else if (isEnd) title = "🏁 End of the program";
+      else title = `Line ${s.l}`;
+      let html = `<div class="sc-top${kind}"><span class="sc-n">Step ${i + 1} / ${N}</span><span class="sc-title">${title}</span></div>`;
+      if (s.e === "line" && !isEnd) html += `<div class="sc-code"><span class="ln">${s.l}</span><code>${hlLine(lineCode)}</code></div>`;
+      if (isEnd) {
+        const full = r.full || r;
+        html += full.error
+          ? `<div class="sc-what bad"><p>🛑 The program stopped with <b>${esc(full.error)}</b>${full.errLine ? ` on line ${full.errLine}` : ""}. Everything after that line never ran.</p></div>`
+          : r.truncated ? `<div class="sc-what"><p>⏸️ The trace stops after ${N} steps to stay readable. The <b>Output</b> tab has the complete result.</p></div>`
+          : `<div class="sc-what"><p>✅ Every line has run. The console below shows everything that was printed${r.stdout ? "" : " (nothing, in this case)"}.</p></div>`;
+        return html;
+      }
+      if (!last) {
+        const ef = effectOf(st, i + 1, this.lines, r.stdout);
+        if (ef.head || ef.fx.length) html += `<div class="sc-what">${ef.head ? `<p>${ef.head}</p>` : ""}${ef.fx.length ? `<ul>${ef.fx.slice(0, 8).map(x => `<li>${x}</li>`).join("")}${ef.fx.length > 8 ? `<li>…and ${ef.fx.length - 8} more</li>` : ""}</ul>` : ""}</div>`;
+      } else if (r.error) {
+        html += `<div class="sc-what bad"><p>🛑 This line raised <b>${esc(r.error)}</b>, and nothing caught it, so the program stopped here.</p></div>`;
+      }
+      if (s.e === "line") {
+        html += this.evalHTML(s);
+        const notes = this.stx[String(s.l)] || [];
+        if (notes.length) html += `<details class="sc-sec sc-syn"${this.synClosed ? "" : " open"}><summary>📖 Syntax used on this line</summary><ul>${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></details>`;
+      }
+      return html;
+    }
+    explainLine(n) {
+      if (this.editing) return;
+      this.pause();
+      const code = (this.lines[n - 1] || "").trim();
+      const notes = this.stx[String(n)] || [];
+      const parts = this.ex.filter(t => t.l === n && t.d);
+      const when = this.steps.map((s, j) => (s.e === "line" && s.l === n ? j : -1)).filter(j => j >= 0);
+      const box = this.host.querySelector(".vz-step");
+      box.innerHTML = `<div class="sc-top"><span class="sc-n">Line ${n}</span><span class="sc-title">📖 What this line means</span><button class="sc-x" data-x>✕ back to step ${this.i + 1}</button></div>
+        <div class="sc-code"><span class="ln">${n}</span><code>${hlLine(code)}</code></div>
+        ${notes.length ? `<div class="sc-sec"><ul>${notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        ${parts.length ? `<div class="sc-sec"><h5>The pieces</h5><ul class="pieces">${parts.map(t => `<li><code>${hlLine(t.s)}</code> ${esc(t.d)}</li>`).join("")}</ul></div>` : ""}
+        ${!notes.length && !parts.length ? `<p class="muted">${code ? "A plain line with no special syntax." : "An empty line."}</p>` : ""}
+        <div class="sc-sec">${when.length ? `This line runs <b>${when.length}×</b>. Jump to: ${when.slice(0, 12).map((j, k) => `<button class="chip" data-j="${j}">${k + 1}${k === 0 ? "st" : k === 1 ? "nd" : k === 2 ? "rd" : "th"} time</button>`).join(" ")}${when.length > 12 ? " …" : ""}` : `<span class="muted">This line never runs in this program${code.startsWith("else") || code.startsWith("finally") ? " (else/finally are markers; their indented lines run)" : ""}.</span>`}</div>`;
+      this.host.querySelectorAll(".vz-line").forEach(el => el.classList.toggle("explain", +el.dataset.n === n));
+      box.querySelector("[data-x]").onclick = () => this.go(this.i);
+      box.querySelectorAll("[data-j]").forEach(b => b.onclick = () => this.go(+b.dataset.j));
+    }
+
+    // ---- quiz me: predict before the step is revealed ----
+    questionFor(j) {
+      const st = this.steps, s = st[j];
+      if (!s || !st[j + 1] || s.e !== "line") return [];
+      const top = topOf(s); if (!top) return [];
+      // the line is finished at the next step that is back in this same frame (calls inside it included)
+      let m = j + 1;
+      while (m < st.length - 1 && !(topOf(st[m]) && topOf(st[m]).id === top.id && st[m].e === "line") && st[m].f.some(f => f.id === top.id)) m++;
+      const n = st[m];
+      const qs = frameDiff(s, n, top.id).filter(d => d.kind !== "deleted" && !isCallableTxt(d.now || ""))
+        .map(d => ({ k: d.k, now: d.now, was: d.old })).slice(0, 2);
+      const printed = n.o > s.o ? this.result.stdout.slice(s.o, n.o).replace(/\n$/, "") : "";
+      if (printed && printed.length < 80) qs.unshift({ k: "printed output", now: printed, print: true });
+      if (qs.length < 2) {                       // ask for the value of the biggest evaluated piece
+        const ev = (s.ev || []).filter(e => e[1][0] === "r" && this.ex[e[0]] && !/^<function/.test(e[1][1])).at(-1);
+        if (ev && ev[1][1].length < 60) qs.push({ k: this.ex[ev[0]].s, now: ev[1][1], expr: true });
+      }
+      return qs.slice(0, 3);
+    }
+    askQuiz(j, qs) {
       this.awaiting = true;
+      const s = this.steps[j];
+      this.host.querySelectorAll(".vz-line").forEach(el => el.classList.toggle("cur", +el.dataset.n === s.l));
+      const box = this.host.querySelector(".vz-step");
+      box.innerHTML = `<div class="sc-top quiz"><span class="sc-n">Step ${j + 1} / ${this.steps.length}</span><span class="sc-title">🎯 Your turn: predict before it runs</span></div>
+        <div class="sc-code"><span class="ln">${s.l}</span><code>${hlLine((this.lines[s.l - 1] || "").trim())}</code></div>
+        <div class="quizq">${qs.map((q, k) => `<label>${q.print ? "🖨️ What will it <b>print</b>?" : q.expr ? `What does <code>${esc(q.k)}</code> evaluate to?` : `<code>${esc(q.k)}</code> ${q.was === undefined ? "(new name)" : `is now <code>${esc(clip(q.was, 24))}</code>`} → becomes`}<input data-q="${k}" spellcheck="false" autocomplete="off" placeholder="${q.print ? "exact output" : "value"}"></label>`).join("")}</div>
+        <div class="row"><button class="primary" data-p="check">Check ↵</button><button data-p="skip">Just show me</button></div>`;
+      const inputs = [...box.querySelectorAll("input")];
+      inputs[0]?.focus();
+      const norm = x => String(x).trim().replace(/\s+/g, " ").replace(/^['"](.*)['"]$/, "$1").toLowerCase();
+      const same = (a, b) => norm(a) === norm(b) || norm(a).replace(/ /g, "") === norm(b).replace(/ /g, "") || (!isNaN(parseFloat(a)) && /^[-\d.e+]+$/i.test(a.trim()) && Math.abs(parseFloat(a) - parseFloat(b)) < 1e-9);
+      const finish = checked => {
+        this.awaiting = false;
+        let res = "";
+        if (checked) qs.forEach((q, k) => {
+          const ok = same(inputs[k].value, q.now); this.score.total++; if (ok) this.score.right++;
+          res += `<div>${ok ? "✅" : "❌"} ${q.print ? "printed" : q.expr ? `<code>${esc(q.k)}</code> →` : `<code>${esc(q.k)}</code> =`} <code>${esc(clip(q.now, 60))}</code>${ok ? "" : ` <span class="muted">(you said <code>${esc(inputs[k].value || "nothing")}</code>)</span>`}</div>`;
+        });
+        const qb = this.host.querySelector("[data-a=quiz]"); if (qb) qb.textContent = `🎯 Quiz me · ${this.score.right}/${this.score.total}`;
+        this.go(j, res ? `<div class="quizres">${res}</div>` : "");
+      };
+      box.querySelector("[data-p=check]").onclick = () => finish(true);
+      box.querySelector("[data-p=skip]").onclick = () => finish(false);
+      inputs.forEach(inp => inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); finish(true); } e.stopPropagation(); }));
     }
 
-    // ---- manual-trace assist: the classic hand-trace table ----
+    // ---- the hand-trace table (state after each step) ----
     renderTrace() {
       const box = this.host.querySelector(".vz-trace"); if (!box) return;
       if (!this._traceHTML) {
-        const cols = [];
-        const isCallable = v => /^(function|class) /.test(v);
-        const rows = this.steps.slice(0, 600).map((s, i) => {
-          const top = s.f[s.f.length - 1];
-          const vals = {};
-          if (top) top.v.forEach(([k, v]) => { const t = short(v, s.h); if (!isCallable(t)) { vals[k] = t; if (!cols.includes(k)) cols.push(k); } });
-          return { i, s, frame: top ? top.n : "", id: top ? top.id : null, vals };
+        const cols = []; const st = this.steps;
+        const rows = st.slice(0, 500).map((s, i) => {
+          const a = st[i + 1] || s; const top = topOf(a); const vals = {};
+          if (top) top.v.forEach(([k, v]) => { const t = short(v, a.h); if (!isCallableTxt(t)) { vals[k] = t; if (!cols.includes(k)) cols.push(k); } });
+          return { i, s, a, id: top ? top.id : null, frame: top ? top.n : "", vals };
         });
-        const shown = cols.slice(0, 12);
-        let prev = null;
+        const shown = cols.slice(0, 10); let prev = null;
         const body = rows.map(r => {
-          const tds = shown.map(k => {
-            const v = r.vals[k];
-            const changed = v !== undefined && (!prev || prev.id !== r.id || prev.vals[k] !== v);
-            return `<td class="${changed ? "chg" : ""}">${v === undefined ? "" : esc(clip(v, 22))}</td>`;
-          }).join("");
-          const out = r.i > 0 && r.s.o > this.steps[r.i - 1].o ? esc(clip(this.result.stdout.slice(this.steps[r.i - 1].o, r.s.o).trim(), 24)) : "";
+          const tds = shown.map(k => { const v = r.vals[k]; const ch = v !== undefined && (!prev || prev.id !== r.id || prev.vals[k] !== v); return `<td class="${ch ? "chg" : ""}">${v === undefined ? "" : esc(clip(v, 20))}</td>`; }).join("");
+          const out = r.a.o > r.s.o ? esc(clip(this.result.stdout.slice(r.s.o, r.a.o).trim(), 22)) : "";
           prev = r;
-          const ev = r.s.e === "call" ? "📞" : r.s.e === "return" ? "↩️" : r.s.e === "exception" ? "💥" : "";
-          return `<tr data-step="${r.i}"><td>${r.i + 1}</td><td>${r.s.l}</td><td class="code">${ev} ${esc(clip((this.lines[r.s.l - 1] || "").trim(), 34))}</td><td>${esc(r.frame)}</td>${tds}<td class="out">${out}</td></tr>`;
+          const ev = r.s.e === "call" ? "📞 " : r.s.e === "return" ? "↩️ " : "";
+          return `<tr data-step="${r.i}"><td>${r.i + 1}</td><td>${r.s.l}</td><td class="code">${ev}${esc(clip((this.lines[r.s.l - 1] || "").trim(), 30))}</td><td>${esc(r.frame)}</td>${tds}<td class="out">${out}</td></tr>`;
         }).join("");
-        this._traceHTML = `<p class="muted tt-help">The hand-trace table you'd write on paper: one row per step, one column per variable. Highlighted cells changed on that step. Click a row to jump there.${this.steps.length > 600 ? " (First 600 steps shown.)" : ""}${cols.length > 12 ? " (First 12 variables shown.)" : ""}</p>
-          <div class="tt-wrap"><table class="tt"><thead><tr><th>Step</th><th>Line</th><th>Code</th><th>Frame</th>${shown.map(k => `<th>${esc(k)}</th>`).join("")}<th>Printed</th></tr></thead><tbody>${body}</tbody></table></div>`;
+        this._traceHTML = `<p class="muted tt-help">The table you'd draw on paper: one row per step, values <i>after</i> the line ran. Highlighted = changed. Click a row to jump.</p>
+          <div class="tt-wrap"><table class="tt"><thead><tr><th>#</th><th>Line</th><th>Code</th><th>Frame</th>${shown.map(k => `<th>${esc(k)}</th>`).join("")}<th>Printed</th></tr></thead><tbody>${body}</tbody></table></div>`;
         box.innerHTML = this._traceHTML;
         box.querySelectorAll("tr[data-step]").forEach(tr => tr.onclick = () => this.go(+tr.dataset.step));
       }
       box.querySelectorAll("tr.cur").forEach(tr => tr.classList.remove("cur"));
       const cur = box.querySelector(`tr[data-step="${this.i}"]`);
-      if (cur) {
-        cur.classList.add("cur");
-        const wrap = box.querySelector(".tt-wrap");
-        if (cur.offsetTop < wrap.scrollTop + 30 || cur.offsetTop > wrap.scrollTop + wrap.clientHeight - 30) wrap.scrollTop = cur.offsetTop - wrap.clientHeight / 2;
-      }
+      if (cur) { cur.classList.add("cur"); const w = box.querySelector(".tt-wrap"); if (cur.offsetTop < w.scrollTop + 30 || cur.offsetTop > w.scrollTop + w.clientHeight - 30) w.scrollTop = cur.offsetTop - w.clientHeight / 2; }
     }
 
     act(a) {
-      if (a === "predict") {
-        this.predict = !this.predict;
-        const pb = this.host.querySelector("[data-a=predict]");
-        if (pb) { pb.classList.toggle("on", this.predict); pb.textContent = this.predict ? `🎯 Predict mode · ${this.score.right}/${this.score.total}` : "🎯 Predict mode"; }
-        if (this.predict) this.pause();
-        this.go(this.i);
+      if (this.awaiting && a !== "quiz") return;
+      if (a === "quiz") {
+        this.quiz = !this.quiz; this.awaiting = false;
+        const b = this.host.querySelector("[data-a=quiz]");
+        if (b) { b.classList.toggle("on", this.quiz); b.textContent = this.quiz ? `🎯 Quiz me · ${this.score.right}/${this.score.total}` : "🎯 Quiz me"; }
+        if (this.quiz) this.pause();
+        this.go(this.i); return;
+      }
+      if (a === "table") {
+        this.showTable = !this.showTable;
+        this.host.querySelector("[data-a=table]")?.classList.toggle("on", this.showTable);
+        const t = this.host.querySelector(".vz-trace"); if (t) t.hidden = !this.showTable;
+        if (this.showTable) this.renderTrace();
         return;
       }
-      if (a === "next" && this.predict && !this.answered.has(this.i)) {
-        const qs = this.questionFor(this.i);
-        if (qs.length) { this.showPredict(qs); return; }
+      if (a === "next" && this.quiz && this.i < this.steps.length - 1) {
+        const qs = this.questionFor(this.i + 1);
+        if (qs.length) { this.pause(); this.askQuiz(this.i + 1, qs); return; }
       }
       if (a === "first") this.go(0);
       if (a === "prev") this.go(this.i - 1);
@@ -621,7 +696,7 @@
     toggleEdit() { this.pause(); this.editing = !this.editing; this.render(); return this.editing; }
     play() {
       if (this.i >= this.steps.length - 1) this.go(0);
-      const sp = +(this.host.querySelector("[data-a=speed]")?.value || 600);
+      const sp = +(this.host.querySelector("[data-a=speed]")?.value || 800);
       this.playing = setInterval(() => { if (this.i >= this.steps.length - 1) this.pause(); else this.go(this.i + 1); }, sp);
       const b = this.host.querySelector("[data-a=play]"); if (b) b.textContent = "⏸ Pause";
     }
@@ -630,7 +705,7 @@
       const b = this.host.querySelector("[data-a=play]"); if (b) b.textContent = "⏵ Play";
     }
     key(e) {
-      if (this.editing) return false;
+      if (this.editing || this.awaiting) return false;
       if (e.key === "ArrowRight") { this.act("next"); return true; }
       if (e.key === "ArrowLeft") { this.act("prev"); return true; }
       if (e.key === "Home") { this.act("first"); return true; }
@@ -639,55 +714,55 @@
       return false;
     }
 
-    go(i) {
-      if (!this.steps.length) return;
+    go(i, banner = "") {
+      if (!this.steps.length || this.editing) return;
       this.i = Math.max(0, Math.min(this.steps.length - 1, i));
-      const s = this.steps[this.i], p = this.steps[this.i - 1], last = this.i === this.steps.length - 1;
+      const s = this.steps[this.i], a = this.steps[this.i + 1] || s, last = this.i === this.steps.length - 1;
       const H = this.host;
-      // code arrows
-      H.querySelectorAll(".vz-line").forEach(el => el.classList.remove("cur", "prev"));
-      if (p && p.l !== s.l) H.querySelector(`.vz-line[data-n="${p.l}"]`)?.classList.add("prev");
+      H.querySelectorAll(".vz-line").forEach(el => el.classList.remove("cur", "explain"));
       const cur = H.querySelector(`.vz-line[data-n="${s.l}"]`);
-      if (cur) { cur.classList.add("cur"); const box = H.querySelector(".vz-code"); const r = cur.offsetTop - box.clientHeight / 2; if (Math.abs(box.scrollTop - r) > box.clientHeight / 3) box.scrollTop = r; }
+      if (cur && !(last && s.e === "return" && s.f.length <= 1)) {
+        cur.classList.add("cur");
+        const box = H.querySelector(".vz-code"); const t = cur.offsetTop - box.clientHeight / 2;
+        if (cur.offsetTop < box.scrollTop + 10 || cur.offsetTop > box.scrollTop + box.clientHeight - 30) box.scrollTop = t;
+      }
       const count = H.querySelector(".count"); if (count) count.textContent = `Step ${this.i + 1} / ${this.steps.length}`;
       const range = H.querySelector("input[type=range]"); if (range) range.value = this.i;
-      H.querySelector("[data-a=prev]") && (H.querySelector("[data-a=prev]").disabled = this.i === 0);
-      H.querySelector("[data-a=next]") && (H.querySelector("[data-a=next]").disabled = last);
-      // narration
-      const narr = H.querySelector(".vz-narr");
-      if (narr && this.lines) {
-        let t = narrate(this.steps, this.i, this.lines, this.result);
-        if (this.predict && !last) t += `<br><span class="muted">🎯 Predict mode is on: press <b>Next</b> and you'll be asked for the new values first.</span>`;
-        narr.innerHTML = t;
+      const pb = H.querySelector("[data-a=prev]"); if (pb) pb.disabled = this.i === 0;
+      const nb = H.querySelector("[data-a=next]"); if (nb) nb.disabled = last;
+      const card = H.querySelector(".vz-step");
+      if (card) {
+        try { card.innerHTML = banner + this.stepCard(this.i); }
+        catch (err) { card.innerHTML = `<div class="sc-top"><span class="sc-n">Step ${this.i + 1}</span><span class="sc-title">Line ${s.l}</span></div><p class="muted">(Couldn't describe this step: ${esc(err.message)})</p>`; console.error(err); }
+        const syn = card.querySelector(".sc-syn"); if (syn) syn.ontoggle = () => (this.synClosed = !syn.open);
       }
-      // frames
-      const prevTop = p ? new Map(p.f.map(f => [f.id, new Map(f.v.map(([k, v]) => [k, short(v, p.h)]))])) : new Map();
-      H.querySelector(".vz-frames").innerHTML = s.f.map((f, fi) => {
-        const isTop = fi === s.f.length - 1; const pv = prevTop.get(f.id);
-        const rows = f.v.map(([k, v]) => {
-          const changed = pv && pv.get(k) !== short(v, s.h);
-          return `<tr class="${changed ? "changed" : ""}"><td class="k">${esc(k)}</td><td class="v">${valCell(v, isTop ? "top-ptr" : "")}</td></tr>`;
-        }).join("");
-        const ret = isTop && s.e === "return" && s.r ? `<tr class="ret"><td class="k">return</td><td class="v">${valCell(s.r, "top-ptr")}</td></tr>` : "";
-        return `<div class="vz-frame${isTop ? " top" : ""}"><div class="fh">${esc(f.n)}</div>${rows || ret ? `<table>${rows}${ret}</table>` : `<div class="none">no variables yet</div>`}</div>`;
-      }).join("") || `<div class="muted" style="font-size:.85rem">(nothing yet)</div>`;
-      // heap
-      const prevHeap = p ? p.h : {};
-      const treePlaced = new Set();
-      H.querySelector(".vz-heap").innerHTML = layoutHeap(s).map(row => {
-        const html = row.map(item => {
-          if (typeof item === "object") return treePlaced.has(item.tree) ? "" : renderTree(item.tree, s, prevHeap, treePlaced);
-          return renderObj(item, s.h[item], !prevHeap[item] || JSON.stringify(prevHeap[item]) !== JSON.stringify(s.h[item]));
-        }).join("");
-        return html ? `<div class="vz-row">${html}</div>` : "";
-      }).join("") || `<div class="muted" style="font-size:.85rem">No objects yet. Plain numbers, strings, booleans and None are shown right inside the frame.</div>`;
-      if (this.view === "trace") this.renderTrace();
-      // output
-      let out = esc(this.result.stdout.slice(0, s.o));
-      if (last) out = esc(this.result.stdout);
-      if (last && this.result.error) out += `<span class="err">${out && !out.endsWith("\n") ? "\n" : ""}Traceback → ${esc(this.result.error)}</span>`;
-      H.querySelector(".vz-out pre").innerHTML = out || `<span class="muted">(no output yet)</span>`;
-      H.querySelector(".vz-out .figs").innerHTML = last ? (this.result.figures || []).map(b => `<img alt="figure" src="data:image/png;base64,${b}">`).join("") : "";
+      // memory after this step
+      try {
+        const prevTop = new Map(s.f.map(f => [f.id, new Map(f.v.map(([k, v]) => [k, short(v, s.h)]))]));
+        H.querySelector(".vz-frames").innerHTML = a.f.map((f, fi) => {
+          const isTop = fi === a.f.length - 1; const pv = prevTop.get(f.id);
+          const rows = f.v.map(([k, v]) => {
+            const changed = !pv || pv.get(k) !== short(v, a.h);
+            return `<tr class="${changed && this.i > 0 ? "changed" : ""}"><td class="k">${esc(k)}</td><td class="v">${valCell(v, isTop ? "top-ptr" : "")}</td></tr>`;
+          }).join("");
+          const ret = s.e === "return" && s.r && fi === a.f.length - 1 && s.f.length > a.f.length ? "" : "";
+          return `<div class="vz-frame${isTop ? " top" : ""}"><div class="fh">${esc(f.n === "Global frame" ? "Global frame (main program)" : f.n + "()")}</div>${rows ? `<table>${rows}${ret}</table>` : `<div class="none">no names yet</div>`}</div>`;
+        }).join("") || `<div class="muted" style="font-size:.85rem">(nothing yet)</div>`;
+        const treePlaced = new Set();
+        H.querySelector(".vz-heap").innerHTML = layoutHeap(a).map(row => {
+          const html = row.map(item => {
+            if (typeof item === "object") return treePlaced.has(item.tree) ? "" : renderTree(item.tree, a, s.h, treePlaced);
+            return renderObj(item, a.h[item], !s.h[item] || JSON.stringify(s.h[item]) !== JSON.stringify(a.h[item]), s.h[item]);
+          }).join("");
+          return html ? `<div class="vz-row">${html}</div>` : "";
+        }).join("") || `<div class="muted" style="font-size:.85rem">No objects yet. Small values (numbers, strings, True/False, None) are shown inside the frame.</div>`;
+      } catch (err) { console.error(err); }
+      if (this.showTable) this.renderTrace();
+      const r = this.result;
+      let out = esc(r.stdout.slice(0, a.o));
+      if (last) { out = esc(r.stdout); if (r.error) out += `<span class="err">${out && !out.endsWith("\n") ? "\n" : ""}${esc(r.error)}</span>`; }
+      H.querySelector(".vz-out pre").innerHTML = out || `<span class="muted">(nothing printed yet)</span>`;
+      H.querySelector(".vz-out .figs").innerHTML = last ? (r.figures || []).map(b => `<img alt="figure" src="data:image/png;base64,${b}">`).join("") : "";
       const outBox = H.querySelector(".vz-out"); outBox.scrollTop = outBox.scrollHeight;
       requestAnimationFrame(() => drawArrows(this.canvas));
     }

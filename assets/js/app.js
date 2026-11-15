@@ -134,7 +134,7 @@
     tocSpy();
   }
   // ---------- code cards: Output · Breakdown · Visualise (precomputed traces) ----------
-  const TRACE_V = "5";
+  const TRACE_V = "6";
   const traceCache = new Map();
   const loadTraces = slug => {
     if (!traceCache.has(slug)) traceCache.set(slug, fetch(`traces/${slug}.json?v=${TRACE_V}`).then(r => (r.ok ? r.json() : {})).catch(() => ({})));
@@ -199,10 +199,9 @@
       if (vb) { vb.outerHTML = `<button data-act="edit" title="Change the code and run it in your browser">✎ Edit &amp; run</button><button data-act="full" title="Open the visualiser full screen">⤢ Full screen</button>`; }
       card.insertAdjacentHTML("beforeend", `<div class="cx">
         <div class="cx-tabs" role="tablist">
+          <button data-cx="viz" role="tab">👣 Step by step <small>${n} steps</small></button>
           <button data-cx="out" role="tab">▸ Output</button>
-          <button data-cx="bd" role="tab">🔍 Breakdown</button>
-          <button data-cx="viz" role="tab">👣 Visualise <small>${n} steps</small></button>
-          <span class="sp"></span><span class="cx-hint">your choice of Output / Visualise is remembered</span>
+          <button data-cx="bd" role="tab">🔍 Line by line</button>
         </div>
         <div class="cx-pane" data-pane="out"><pre class="cx-out">${outputHTML(r)}</pre></div>
         <div class="cx-pane" data-pane="bd" hidden></div>

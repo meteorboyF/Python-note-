@@ -60,11 +60,35 @@ def trace_one(code):
     signal.signal(signal.SIGALRM, _timeout)
     signal.alarm(20)
     try:
+        import importlib
+        sys.dont_write_bytecode = True
+
+        import tempfile
+        tmp = tempfile.gettempdir()
+        base_path = list(sys.path)
+
+        def fresh():                       # forget modules/paths an example created locally
+            for name, m in list(sys.modules.items()):
+                f = getattr(m, "__file__", None) or ""
+                if name == "this" or (f.startswith(tmp) and "pn-ex-" in f):
+                    sys.modules.pop(name, None)
+            sys.path[:] = base_path
+            importlib.invalidate_caches()
+
+        start = os.getcwd()
+        fresh()
         r = json.loads(tracer.run_user(code, "trace", ""))
-        if r["truncated"]:                       # trace was cut: get the complete output too
-            full = json.loads(tracer.run_user(code, "run", ""))
+        import shutil, tempfile
+        os.chdir(tempfile.mkdtemp(prefix="pn-ex-"))       # clean folder for the plain run too
+        fresh()
+        full = json.loads(tracer.run_user(code, "run", ""))   # plain run, no instrumentation
+        if r["truncated"]:                       # trace was cut: keep the complete output too
             r["full"] = {"stdout": full["stdout"], "error": full["error"], "errLine": full["errLine"]}
             r["figures"] = full["figures"]
+        elif (r["stdout"], r["error"]) != (full["stdout"], full["error"]):
+            # tracing keeps objects alive / takes time: the Output tab shows the plain run
+            r["full"] = {"stdout": full["stdout"], "error": full["error"], "errLine": full["errLine"]}
+            r["_mismatch"] = f"traced: {r['stdout'][-80:]!r} {r['error']} | plain: {full['stdout'][-80:]!r} {full['error']}"
         return r
     finally:
         signal.alarm(0)
@@ -112,6 +136,8 @@ def delta_frames(steps):
 
 def work(args):
     slug, h, code = args
+    import tempfile
+    os.chdir(tempfile.mkdtemp(prefix="pn-ex-"))       # every example gets a clean folder
     try:
         r = trace_one(code)
     except BaseException as e:   # timeouts etc.
@@ -153,6 +179,8 @@ def main():
                     f.write(base64.b64decode(b64))
                 figs.append(name)
             r["figs"] = figs
+            if "_mismatch" in r:
+                problems.append(f"{slug}:{h} OUTPUT DIFFERS {r.pop('_mismatch')}")
             delta_heaps(r["steps"])
             delta_frames(r["steps"])
             results.setdefault(slug, {})[h] = r
