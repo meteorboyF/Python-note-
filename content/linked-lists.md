@@ -317,6 +317,52 @@ ML connections: a **computation graph** (autograd) is a linked structure of oper
 | 9 | Forgetting `prev` updates in doubly linked lists | update all 4 pointers |
 | 10 | Using linked lists in Python for speed | lists/deques are usually faster |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+class N:
+    def __init__(self, v, nxt=None): self.v, self.next = v, nxt
+head = N(1, N(2, N(3)))
+cur = head
+cur = cur.next
+cur.v = 99
+print(head.v, head.next.v)
+```
+What prints?
+- [ ] `99 2`
+- [x] `1 99`
+- [ ] `1 2`
+`cur = cur.next` only moves the **name** `cur`. But `cur.v = 99` modifies the node object that `head.next` also points to.
+:::
+
+:::quiz
+```python norun
+class N:
+    def __init__(self, v, nxt=None): self.v, self.next = v, nxt
+def push_front(head, v):
+    head = N(v, head)
+h = N(1)
+push_front(h, 0)
+print(h.v)
+```
+What prints?
+- [x] `1`
+- [ ] `0`
+- [ ] `AttributeError`
+Rebinding the **parameter** `head` inside the function doesn't change the caller's `h`. Linked-list functions that change the head must **return** the new head (`h = push_front(h, 0)`).
+:::
+
+:::quiz
+Floyd's cycle detection moves `slow` by 1 and `fast` by 2. In a list with a cycle, why must they meet?
+- [x] Inside the cycle, the gap between them shrinks by exactly 1 node every step
+- [ ] Because fast eventually becomes None
+- [ ] They only meet if the cycle length is even
+Once both pointers are inside the cycle, `fast` gains exactly one node on `slow` per step, so the gap decreases by 1 each time until it hits 0. It can't skip over `slow`, which guarantees O(n) detection with O(1) memory.
+:::
+
 ## Practice problems
 
 :::problem basic | Reverse a linked list | pointer manipulation
@@ -674,4 +720,269 @@ print("original intact:", describe(a))
 ```
 :::explain
 **Dict version**: map each original node to its clone, then wire the clones' pointers through the map: O(n) space. **Interleaved version**: insert each clone right after its original, so `original.random.next` *is* the clone of the random target, with no map needed. Then unweave the two lists. It's a classic trick for using the structure itself as a hash table. Both handle self-references and `None` randoms.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Middle of the linked list | LeetCode 876 | https://leetcode.com/problems/middle-of-the-linked-list/
+Return the middle node of a linked list. If there are two middle nodes, return the **second** one. Use fast and slow pointers. (The helpers `build` and `to_list` are provided in the starter.)
+:::starter
+```python norun
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def build(vals):
+    head = None
+    for v in reversed(vals):
+        head = ListNode(v, head)
+    return head
+
+def to_list(node):
+    out = []
+    while node:
+        out.append(node.val); node = node.next
+    return out
+
+def middle_node(head):
+    pass
+```
+:::tests
+```python norun
+assert to_list(middle_node(build([1, 2, 3, 4, 5]))) == [3, 4, 5]
+assert to_list(middle_node(build([1, 2, 3, 4, 5, 6]))) == [4, 5, 6]
+assert to_list(middle_node(build([7]))) == [7]
+```
+:::solution
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def build(vals):
+    head = None
+    for v in reversed(vals):
+        head = ListNode(v, head)
+    return head
+
+def to_list(node):
+    out = []
+    while node:
+        out.append(node.val); node = node.next
+    return out
+
+def middle_node(head):
+    slow = fast = head
+    while fast and fast.next:
+        slow, fast = slow.next, fast.next.next
+    return slow
+
+print(to_list(middle_node(build([1, 2, 3, 4, 5, 6]))))
+```
+:::explain
+`fast` moves twice as fast, so when it reaches the end, `slow` is halfway: one pass, with no need to count the length first. The loop condition `fast and fast.next` stops safely for both odd and even lengths, and the even case naturally lands on the **second** middle.
+:::complexity
+O(n) time, O(1) space.
+:::end
+
+:::program basic | Linked list cycle | LeetCode 141 | https://leetcode.com/problems/linked-list-cycle/
+Return True if the list has a cycle, using O(1) memory (Floyd's algorithm). The test builds lists whose tail points back to the node at index `pos` (−1 means no cycle).
+:::starter
+```python norun
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def has_cycle(head):
+    pass
+```
+:::tests
+```python norun
+def make(vals, pos):
+    nodes = [ListNode(v) for v in vals]
+    for a, b in zip(nodes, nodes[1:]): a.next = b
+    if nodes and pos >= 0: nodes[-1].next = nodes[pos]
+    return nodes[0] if nodes else None
+assert has_cycle(make([3, 2, 0, -4], 1)) is True
+assert has_cycle(make([1, 2], 0)) is True
+assert has_cycle(make([1], -1)) is False
+assert has_cycle(make([], -1)) is False
+assert has_cycle(make(list(range(10000)), 5000)) is True
+```
+:::solution
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def has_cycle(head):
+    slow = fast = head
+    while fast and fast.next:
+        slow, fast = slow.next, fast.next.next
+        if slow is fast:                 # identity, not ==
+            return True
+    return False
+
+a, b, c = ListNode(1), ListNode(2), ListNode(3)
+a.next, b.next, c.next = b, c, a
+print(has_cycle(a), has_cycle(ListNode(9)))
+```
+:::explain
+Without a cycle, `fast` falls off the end. With one, both pointers end up circling, and `fast` closes the gap by 1 node per step, so they must meet. We compare with `is` because two *different* nodes may hold equal values. A visited set also works, but costs O(n) memory.
+:::complexity
+O(n) time, O(1) space.
+:::end
+
+:::program medium | Remove Nth node from end | LeetCode 19 | https://leetcode.com/problems/remove-nth-node-from-end-of-list/
+Remove the `n`-th node from the **end** in one pass, and return the head (which may change).
+:::starter
+```python norun
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def build(vals):
+    head = None
+    for v in reversed(vals):
+        head = ListNode(v, head)
+    return head
+
+def to_list(node):
+    out = []
+    while node:
+        out.append(node.val); node = node.next
+    return out
+
+def remove_nth_from_end(head, n):
+    pass
+```
+:::tests
+```python norun
+assert to_list(remove_nth_from_end(build([1, 2, 3, 4, 5]), 2)) == [1, 2, 3, 5]
+assert to_list(remove_nth_from_end(build([1]), 1)) == []
+assert to_list(remove_nth_from_end(build([1, 2]), 1)) == [1]
+assert to_list(remove_nth_from_end(build([1, 2]), 2)) == [2]
+```
+:::hint
+Start both pointers at a **dummy** node placed before the head. Move `fast` n + 1 steps ahead, then move both until `fast` is None. `slow` then sits just **before** the node to delete.
+:::solution
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def build(vals):
+    head = None
+    for v in reversed(vals):
+        head = ListNode(v, head)
+    return head
+
+def to_list(node):
+    out = []
+    while node:
+        out.append(node.val); node = node.next
+    return out
+
+def remove_nth_from_end(head, n):
+    dummy = ListNode(0, head)
+    slow = fast = dummy
+    for _ in range(n + 1):
+        fast = fast.next
+    while fast:
+        slow, fast = slow.next, fast.next
+    slow.next = slow.next.next            # unlink the target
+    return dummy.next
+
+print(to_list(remove_nth_from_end(build([1, 2, 3, 4, 5]), 2)))
+```
+:::explain
+The fixed gap of n + 1 nodes means that when `fast` falls off the end, `slow` is right before the target. The **dummy** node makes "remove the head" (the last test) work with no special case: `slow` simply stays at the dummy. Returning `dummy.next` gives the possibly-new head.
+:::trace
+`[1,2,3,4,5]`, n = 2 (gap of 3):
+| slow | fast |
+|---|---|
+| dummy | 3 |
+| 1 | 4 |
+| 2 | 5 |
+| 3 | None → unlink 4 → [1, 2, 3, 5] |
+:::complexity
+O(n) time, O(1) space.
+:::end
+
+:::program hard | Merge k sorted lists | LeetCode 23 | https://leetcode.com/problems/merge-k-sorted-lists/
+Merge `k` sorted linked lists into one sorted list in O(N log k).
+:::starter
+```python norun
+import heapq
+
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def build(vals):
+    head = None
+    for v in reversed(vals):
+        head = ListNode(v, head)
+    return head
+
+def to_list(node):
+    out = []
+    while node:
+        out.append(node.val); node = node.next
+    return out
+
+def merge_k_lists(lists):
+    pass
+```
+:::tests
+```python norun
+assert to_list(merge_k_lists([build([1, 4, 5]), build([1, 3, 4]), build([2, 6])])) == [1, 1, 2, 3, 4, 4, 5, 6]
+assert to_list(merge_k_lists([])) == []
+assert to_list(merge_k_lists([None, build([0])])) == [0]
+import random
+ls = [sorted(random.randint(0, 99) for _ in range(random.randint(0, 20))) for _ in range(30)]
+assert to_list(merge_k_lists([build(l) for l in ls])) == sorted(x for l in ls for x in l)
+```
+:::hint
+Push the head of each list into a min-heap as `(val, i, node)`. The index `i` breaks ties, because nodes aren't comparable. Pop the smallest, append it to the result, and push its `next`.
+:::solution
+```python
+import heapq
+
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val, self.next = val, next
+
+def build(vals):
+    head = None
+    for v in reversed(vals):
+        head = ListNode(v, head)
+    return head
+
+def to_list(node):
+    out = []
+    while node:
+        out.append(node.val); node = node.next
+    return out
+
+def merge_k_lists(lists):
+    heap = [(node.val, i, node) for i, node in enumerate(lists) if node]
+    heapq.heapify(heap)
+    dummy = tail = ListNode()
+    while heap:
+        val, i, node = heapq.heappop(heap)
+        tail.next = node                      # reuse the existing node
+        tail = node
+        if node.next:
+            heapq.heappush(heap, (node.next.val, i, node.next))
+    return dummy.next
+
+print(to_list(merge_k_lists([build([1, 4, 5]), build([1, 3, 4]), build([2, 6])])))
+```
+:::explain
+The heap always holds one candidate per list: its current head. The global minimum must be among them. Popping it and pushing its successor keeps the heap at size k or less, so each of the N nodes costs O(log k). We relink the existing nodes instead of creating new ones. The index tie-breaker avoids comparing `ListNode` objects, which would raise TypeError.
+:::complexity
+O(N log k) time, O(k) heap space.
 :::end

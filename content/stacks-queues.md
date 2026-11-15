@@ -354,6 +354,57 @@ for epoch, l in enumerate(losses):
 | 9 | Storing values instead of indices in a monotonic stack | store indices |
 | 10 | Thread consumers never stopping | sentinel `None` + `join` |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+from collections import deque
+d = deque([1, 2, 3], maxlen=3)
+d.append(4)
+d.appendleft(0)
+print(list(d))
+```
+What prints?
+- [ ] `[0, 1, 2, 3, 4]`
+- [x] `[0, 2, 3]`
+- [ ] `[1, 2, 3]`
+With `maxlen`, adding to one end silently drops from the **other**. `append(4)` drops 1, giving `[2, 3, 4]`, then `appendleft(0)` drops 4, giving `[0, 2, 3]`.
+:::
+
+:::quiz
+```python norun
+stack = [1, 2, 3]
+queue = [1, 2, 3]
+print(stack.pop(), queue.pop(0), stack, queue)
+```
+What prints?
+- [x] `3 1 [1, 2] [2, 3]`
+- [ ] `1 3 [2, 3] [1, 2]`
+- [ ] `3 3 [1, 2] [1, 2]`
+`pop()` removes from the end (stack, LIFO), and `pop(0)` from the front (queue, FIFO). But `pop(0)` is **O(n)** because every element shifts, so use `deque.popleft()` for real queues.
+:::
+
+:::quiz
+```python norun
+def f(s):
+    st = []
+    for ch in s:
+        if st and st[-1] == ch:
+            st.pop()
+        else:
+            st.append(ch)
+    return "".join(st)
+print(f("abbaca"), f("aabb"), f("abc"))
+```
+What prints?
+- [x] `ca  abc` (an empty string in the middle)
+- [ ] `aca ab abc`
+- [ ] `ca ab abc`
+Each character either cancels the matching top of the stack or is pushed. `"abbaca"` → `bb` cancels, then `aa` cancels, leaving `"ca"`. `"aabb"` cancels completely, so the middle value is an empty string.
+:::
+
 ## Practice problems
 
 :::problem basic | Min stack in O(1) | auxiliary stack
@@ -599,4 +650,190 @@ print(longest_within_limit([8, 2, 4, 7], 4), longest_within_limit([10, 1, 2, 4, 
 ```
 :::explain
 A decreasing deque tracks the window maximum and an increasing deque tracks the minimum, and each element is pushed and popped at most once per deque: O(n). In the variable-size version, the second solution stores **values** (not indices) and removes the front only when the value leaving the window equals it. That works because equal values are kept (`<` and `>`, not `<=`), so duplicates are popped one at a time.
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Valid parentheses | LeetCode 20 | https://leetcode.com/problems/valid-parentheses/
+A string of `()[]{}` is valid if every bracket is closed by the same type, in the correct order.
+:::starter
+```python norun
+def is_valid(s):
+    pass
+```
+:::tests
+```python norun
+assert is_valid("()") and is_valid("()[]{}") and is_valid("{[()]}") and is_valid("")
+assert not is_valid("(]") and not is_valid("([)]") and not is_valid("((") and not is_valid("]")
+```
+:::solution
+```python
+def is_valid(s):
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack = []
+    for ch in s:
+        if ch in pairs:
+            if not stack or stack.pop() != pairs[ch]:
+                return False
+        else:
+            stack.append(ch)
+    return not stack                 # leftovers mean unclosed brackets
+
+print(is_valid("{[()]}"), is_valid("([)]"), is_valid("(("))
+```
+:::explain
+The most recently opened bracket must be closed first, which is exactly **LIFO**, so a stack. The dict maps each closer to its opener. Two failure modes: a closer with an empty or mismatched stack, and openers left over at the end (`return not stack`).
+:::trace
+`"{[()]}"`:
+| ch | action | stack |
+|---|---|---|
+| { | push | { |
+| [ | push | {[ |
+| ( | push | {[( |
+| ) | pop ( ✓ | {[ |
+| ] | pop [ ✓ | { |
+| } | pop { ✓ | empty → **True** |
+:::complexity
+O(n).
+:::end
+
+:::program basic | Baseball game | LeetCode 682 | https://leetcode.com/problems/baseball-game/
+Process operations: an integer records a score, `"+"` records the sum of the previous two, `"D"` records double the previous score, and `"C"` cancels the previous score. Return the total.
+:::starter
+```python norun
+def cal_points(operations):
+    pass
+```
+:::tests
+```python norun
+assert cal_points(["5", "2", "C", "D", "+"]) == 30
+assert cal_points(["5", "-2", "4", "C", "D", "9", "+", "+"]) == 27
+assert cal_points(["1", "C"]) == 0
+```
+:::solution
+```python
+def cal_points(operations):
+    stack = []
+    for op in operations:
+        if op == "+":
+            stack.append(stack[-1] + stack[-2])
+        elif op == "D":
+            stack.append(2 * stack[-1])
+        elif op == "C":
+            stack.pop()
+        else:
+            stack.append(int(op))
+    return sum(stack)
+
+print(cal_points(["5", "2", "C", "D", "+"]))
+```
+:::explain
+Every operation looks at, or undoes, the **most recent** scores, so a stack is the natural structure. `stack[-1]` and `stack[-2]` peek without popping. Note that `int("-2")` handles negative scores, which is why the number branch goes last.
+:::complexity
+O(n).
+:::end
+
+:::program medium | Asteroid collision | LeetCode 735 | https://leetcode.com/problems/asteroid-collision/
+Positive asteroids move right and negative ones move left. When a right-mover meets a left-mover, the smaller one explodes, and if they're the same size both explode. Return the final state.
+:::starter
+```python norun
+def asteroid_collision(asteroids):
+    pass
+```
+:::tests
+```python norun
+assert asteroid_collision([5, 10, -5]) == [5, 10]
+assert asteroid_collision([8, -8]) == []
+assert asteroid_collision([10, 2, -5]) == [10]
+assert asteroid_collision([-2, -1, 1, 2]) == [-2, -1, 1, 2]
+assert asteroid_collision([1, -2, -2, -2]) == [-2, -2, -2]
+```
+:::hint
+Push each asteroid. A collision only happens when the stack top is **positive** and the new one is **negative**. Use a `while` loop, because one big left-mover can destroy several asteroids.
+:::solution
+```python
+def asteroid_collision(asteroids):
+    stack = []
+    for a in asteroids:
+        alive = True
+        while alive and a < 0 and stack and stack[-1] > 0:
+            if stack[-1] < -a:
+                stack.pop()               # the top explodes; keep checking
+            elif stack[-1] == -a:
+                stack.pop()               # both explode
+                alive = False
+            else:
+                alive = False             # the incoming asteroid explodes
+        if alive:
+            stack.append(a)
+    return stack
+
+print(asteroid_collision([10, 2, -5]), asteroid_collision([5, 10, -5]))
+```
+:::explain
+The stack holds the survivors so far, in order. Only a left-mover arriving after right-movers can collide, and it fights the **nearest** right-mover first (the stack top). The inner `while` keeps resolving collisions until this asteroid dies or the threat is gone. Each asteroid is pushed and popped at most once: O(n).
+:::trace
+`[10, 2, -5]`:
+| a | stack top | result | stack |
+|---|---|---|---|
+| 10 | — | push | [10] |
+| 2 | 10 | push | [10, 2] |
+| -5 | 2 < 5 | pop 2 | [10] |
+| -5 | 10 > 5 | -5 explodes | [10] |
+:::complexity
+O(n).
+:::end
+
+:::program hard | Longest valid parentheses | LeetCode 32 | https://leetcode.com/problems/longest-valid-parentheses/
+Return the length of the longest **well-formed** parentheses substring: `")()())"` → 4.
+:::starter
+```python norun
+def longest_valid_parentheses(s):
+    pass
+```
+:::tests
+```python norun
+assert longest_valid_parentheses("(()") == 2
+assert longest_valid_parentheses(")()())") == 4
+assert longest_valid_parentheses("") == 0
+assert longest_valid_parentheses("()(()") == 2
+assert longest_valid_parentheses("()(())") == 6
+assert longest_valid_parentheses("(()())") == 6
+```
+:::hint
+Push **indices**. Seed the stack with -1 as a "base" (the index before the current valid run). On `)`, pop. If the stack becomes empty, push the current index as the new base. Otherwise the current valid length is `i - stack[-1]`.
+:::solution
+```python
+def longest_valid_parentheses(s):
+    stack = [-1]                       # base: the index just before the current valid run
+    best = 0
+    for i, ch in enumerate(s):
+        if ch == "(":
+            stack.append(i)
+        else:
+            stack.pop()
+            if not stack:
+                stack.append(i)        # an unmatched ')' becomes the new base
+            else:
+                best = max(best, i - stack[-1])
+    return best
+
+print(longest_valid_parentheses(")()())"), longest_valid_parentheses("()(())"))
+```
+:::explain
+Storing **indices** (not characters) lets us measure lengths. After popping a matched `(`, the new top is the last index that is *not* part of the current valid substring, so `i - top` is the current run length. An unmatched `)` breaks every run, so it becomes the new base. This is the stack version. A two-pass counter solution with O(1) space also exists.
+:::trace
+`")()())"`:
+| i | ch | action | stack | best |
+|---|---|---|---|---|
+| 0 | ) | pop -1 → empty, push 0 | [0] | 0 |
+| 1 | ( | push | [0, 1] | 0 |
+| 2 | ) | pop → top 0 | [0] | 2 |
+| 3 | ( | push | [0, 3] | 2 |
+| 4 | ) | pop → top 0 | [0] | **4** |
+| 5 | ) | pop → empty, push 5 | [5] | 4 |
+:::complexity
+O(n) time and space.
 :::end

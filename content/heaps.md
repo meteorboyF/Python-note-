@@ -307,6 +307,57 @@ print(beam_search("the"))
 | 9 | O(n log n) pushes instead of O(n) heapify | heapify bulk data |
 | 10 | Top-K largest with a MAX-heap of all n items | a min-heap of size k |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+import heapq
+h = [5, 1, 4, 2, 3]
+heapq.heapify(h)
+print(h[0], h == sorted(h), heapq.heappop(h), h[0])
+```
+What prints?
+- [x] `1 False 1 2`
+- [ ] `1 True 1 2`
+- [ ] `5 False 5 4`
+A heap guarantees only that `h[0]` is the smallest. The rest of the list is in **heap order**, not sorted order. After popping 1, the next smallest (2) bubbles up to the top.
+:::
+
+:::quiz
+```python norun
+import heapq
+scores = [40, 95, 72]
+h = [-s for s in scores]
+heapq.heapify(h)
+print(-heapq.heappop(h), heapq.nlargest(2, scores), heapq.nsmallest(1, scores))
+```
+What prints?
+- [x] `95 [95, 72] [40]`
+- [ ] `40 [95, 72] [40]`
+- [ ] `-95 [72, 95] [40]`
+`heapq` is a **min**-heap, so negating the values turns it into a max-heap (remember to negate back). `nlargest` returns its results largest first.
+:::
+
+:::quiz
+```python norun
+import heapq
+h = []
+heapq.heappush(h, (1, {"job": "a"}))
+try:
+    heapq.heappush(h, (1, {"job": "b"}))
+    print("ok")
+except TypeError:
+    print("TypeError")
+```
+What prints?
+- [ ] `ok`
+- [x] `TypeError`
+- [ ] nothing
+On equal priorities, tuple comparison moves on to the **dicts**, and dicts aren't orderable. Insert a unique tie-breaker: `(priority, counter, payload)`.
+:::
+
 ## Practice problems
 
 :::problem basic | Kth largest element | min-heap of size k
@@ -537,4 +588,225 @@ print(smallest_range([[4, 10, 15, 24, 26], [0, 9, 12, 20], [5, 18, 22, 30]]))
 ```
 :::explain
 Keep exactly one pointer per list. The current range is `[min of the pointed values, max of the pointed values]`. To try to shrink it, advance the list holding the **minimum** (the heap gives it to us in O(log k)) and update the running max. When any list runs out, no range can include all lists any more. O(N log k).
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Kth largest element in a stream | LeetCode 703 | https://leetcode.com/problems/kth-largest-element-in-a-stream/
+Design `KthLargest(k, nums)` whose `add(val)` returns the current k-th largest element of the stream.
+:::starter
+```python norun
+import heapq
+
+class KthLargest:
+    def __init__(self, k, nums):
+        pass
+    def add(self, val):
+        pass
+```
+:::tests
+```python norun
+kl = KthLargest(3, [4, 5, 8, 2])
+assert [kl.add(x) for x in [3, 5, 10, 9, 4]] == [4, 5, 5, 8, 8]
+k1 = KthLargest(1, [])
+assert [k1.add(x) for x in [-3, -2, -4, 0, 4]] == [-3, -2, -2, 0, 4]
+k2 = KthLargest(2, [0])
+assert [k2.add(x) for x in [-1, 1, -2, -4, 3]] == [-1, 0, 0, 0, 1]
+```
+:::hint
+Keep a **min-heap of size k** holding the k largest values seen so far. Its root is the k-th largest.
+:::solution
+```python
+import heapq
+
+class KthLargest:
+    def __init__(self, k, nums):
+        self.k = k
+        self.heap = []
+        for x in nums:
+            self.add(x)
+    def add(self, val):
+        if len(self.heap) < self.k:
+            heapq.heappush(self.heap, val)
+        elif val > self.heap[0]:
+            heapq.heapreplace(self.heap, val)     # pop the smallest + push, in one step
+        return self.heap[0]
+
+kl = KthLargest(3, [4, 5, 8, 2])
+print([kl.add(x) for x in [3, 5, 10, 9, 4]], kl.heap)
+```
+:::explain
+Only the top k values matter. Anything smaller than the heap's root can never become the k-th largest, so it's ignored. `heapreplace` swaps out the root in one O(log k) operation. Memory stays O(k) no matter how long the stream runs.
+:::complexity
+O(log k) per add, O(k) space.
+:::end
+
+:::program basic | Relative ranks | LeetCode 506 | https://leetcode.com/problems/relative-ranks/
+Given unique scores, return each athlete's rank: `"Gold Medal"`, `"Silver Medal"`, `"Bronze Medal"` for the top 3, and the placement number as a string otherwise. Use a heap.
+:::starter
+```python norun
+import heapq
+
+def find_relative_ranks(score):
+    pass
+```
+:::tests
+```python norun
+assert find_relative_ranks([5, 4, 3, 2, 1]) == ["Gold Medal", "Silver Medal", "Bronze Medal", "4", "5"]
+assert find_relative_ranks([10, 3, 8, 9, 4]) == ["Gold Medal", "5", "Bronze Medal", "Silver Medal", "4"]
+assert find_relative_ranks([1]) == ["Gold Medal"]
+```
+:::solution
+```python
+import heapq
+
+def find_relative_ranks(score):
+    heap = [(-s, i) for i, s in enumerate(score)]      # max-heap via negation, remembering the index
+    heapq.heapify(heap)
+    medals = ["Gold Medal", "Silver Medal", "Bronze Medal"]
+    result = [""] * len(score)
+    place = 1
+    while heap:
+        _, i = heapq.heappop(heap)
+        result[i] = medals[place - 1] if place <= 3 else str(place)
+        place += 1
+    return result
+
+print(find_relative_ranks([10, 3, 8, 9, 4]))
+```
+:::explain
+Each heap entry carries the athlete's **original index**, so after popping in rank order we can write the answer back to the right slot. Negating the score makes `heapq`'s min-heap behave as a max-heap. `heapify` is O(n), and n pops cost O(n log n).
+:::complexity
+O(n log n).
+:::end
+
+:::program medium | Reorganize string | LeetCode 767 | https://leetcode.com/problems/reorganize-string/
+Rearrange the letters so that no two adjacent characters are the same, or return `""` if that's impossible. (Any valid answer is accepted, so the tests check validity.)
+:::starter
+```python norun
+import heapq
+from collections import Counter
+
+def reorganize_string(s):
+    pass
+```
+:::tests
+```python norun
+from collections import Counter
+def ok(src, out):
+    return Counter(src) == Counter(out) and all(a != b for a, b in zip(out, out[1:]))
+assert ok("aab", reorganize_string("aab"))
+assert reorganize_string("aaab") == ""
+assert ok("vvvlo", reorganize_string("vvvlo"))
+assert ok("aaabbbcc", reorganize_string("aaabbbcc"))
+assert reorganize_string("a") == "a" and reorganize_string("aa") == ""
+```
+:::hint
+Greedily place the **most frequent** remaining character that isn't the one you just placed. Use a max-heap of counts, and hold the just-used character out of the heap for one round.
+:::solution
+```python
+import heapq
+from collections import Counter
+
+def reorganize_string(s):
+    heap = [(-n, ch) for ch, n in Counter(s).items()]
+    heapq.heapify(heap)
+    out = []
+    held = None                                  # (neg_count, ch) used last turn, cooling down
+    while heap:
+        n, ch = heapq.heappop(heap)
+        out.append(ch)
+        if held:
+            heapq.heappush(heap, held)           # the previous char may be used again
+        held = (n + 1, ch) if n + 1 < 0 else None
+    return "".join(out) if not held else ""
+
+print(reorganize_string("aaabbbcc"), repr(reorganize_string("aaab")))
+```
+:::explain
+Always using the most common available letter is the safest move, because it's the hardest to fit later. The one just used is **held back** for one turn so it can't repeat immediately. If we run out of other letters while one is still held, it can't be placed, so the answer is impossible. (It's impossible exactly when some letter appears more than ⌈n/2⌉ times.)
+:::complexity
+O(n log k) for k distinct letters.
+:::end
+
+:::program hard | Sliding window median | LeetCode 480 | https://leetcode.com/problems/sliding-window-median/
+Return the median of every window of size `k` as it slides across `nums`. (For an even k, the median is the mean of the two middle values.)
+:::starter
+```python norun
+def median_sliding_window(nums, k):
+    pass
+```
+:::tests
+```python norun
+assert median_sliding_window([1, 3, -1, -3, 5, 3, 6, 7], 3) == [1, -1, -1, 3, 5, 6]
+assert median_sliding_window([1, 2, 3, 4, 2, 3, 1, 4, 2], 3) == [2, 3, 3, 3, 2, 3, 2]
+assert median_sliding_window([1, 4, 2, 3], 4) == [2.5]
+assert median_sliding_window([5, 5, 5], 2) == [5.0, 5.0]
+import random, statistics
+xs = [random.randint(-50, 50) for _ in range(300)]
+assert median_sliding_window(xs, 7) == [statistics.median(xs[i:i + 7]) for i in range(294)]
+```
+:::hint
+Use two heaps (`lo` = a max-heap of the smaller half, `hi` = a min-heap of the larger half) plus **lazy deletion**: count outgoing values in a dict and discard them only when they reach a heap's top. Track the "valid" sizes yourself.
+:::solution
+```python
+import heapq
+from collections import defaultdict
+
+def median_sliding_window(nums, k):
+    lo, hi = [], []                      # lo: max-heap (negated), hi: min-heap
+    delayed = defaultdict(int)           # value -> pending deletions
+    lo_size = hi_size = 0
+
+    def prune(heap, sign):
+        while heap and delayed[sign * heap[0]]:
+            delayed[sign * heap[0]] -= 1
+            heapq.heappop(heap)
+
+    def rebalance():
+        nonlocal lo_size, hi_size
+        if lo_size > hi_size + 1:
+            heapq.heappush(hi, -heapq.heappop(lo)); lo_size -= 1; hi_size += 1; prune(lo, -1)
+        elif lo_size < hi_size:
+            heapq.heappush(lo, -heapq.heappop(hi)); hi_size -= 1; lo_size += 1; prune(hi, 1)
+
+    def add(x):
+        nonlocal lo_size, hi_size
+        if not lo or x <= -lo[0]:
+            heapq.heappush(lo, -x); lo_size += 1
+        else:
+            heapq.heappush(hi, x); hi_size += 1
+        rebalance()
+
+    def remove(x):
+        nonlocal lo_size, hi_size
+        delayed[x] += 1
+        if x <= -lo[0]:
+            lo_size -= 1
+            if x == -lo[0]: prune(lo, -1)
+        else:
+            hi_size -= 1
+            if hi and x == hi[0]: prune(hi, 1)
+        rebalance()
+
+    def median():
+        return -lo[0] if k % 2 else (-lo[0] + hi[0]) / 2
+
+    out = []
+    for i, x in enumerate(nums):
+        add(x)
+        if i >= k:
+            remove(nums[i - k])
+        if i >= k - 1:
+            out.append(median())
+    return out
+
+print(median_sliding_window([1, 3, -1, -3, 5, 3, 6, 7], 3))
+```
+:::explain
+This combines three heap ideas. **Two heaps** keep the median at the tops, as in the Median Finder problem. **Lazy deletion** handles values leaving the window: we only *mark* them in `delayed`, and physically remove them when they surface at a heap top (`prune`). Since heaps may contain stale entries, we track the **logical** sizes (`lo_size`, `hi_size`) for rebalancing. The random test compares every window against `statistics.median`.
+:::complexity
+O(n log k) amortised.
 :::end

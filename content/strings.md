@@ -306,6 +306,45 @@ print({k: float(v) for k, v in re.findall(r"(\w+)=([\d.]+)", log)})
 | 9 | `"".join([1, 2])` → TypeError | `map(str, …)` |
 | 10 | Case-insensitive compare with `lower()` on Unicode | `casefold()` (+ normalisation) |
 
+## 🍪 Predict the output
+
+Guess before you click. These are the exact traps interviewers use.
+
+:::quiz
+```python norun
+print("a  b ".split(), "a  b ".split(" "), "xxhixx".strip("x"), "abcab".strip("ab"))
+```
+What prints?
+- [x] `['a', 'b'] ['a', '', 'b', ''] hi c`
+- [ ] `['a', 'b'] ['a', 'b'] hi cab`
+- [ ] `['a', '', 'b'] ['a', '', 'b', ''] hi c`
+`split()` with no argument splits on **runs** of whitespace and drops the empty pieces, while `split(" ")` splits on every single space. `strip(chars)` removes **any** of those characters from both ends, so it's not a substring removal.
+:::
+
+:::quiz
+```python norun
+s = "Python"
+print(s[::-1][:3], s[-3:], s[1:100], s.find("z"), "th" in s)
+```
+What prints?
+- [x] `noh hon ython -1 True`
+- [ ] `noh hon ython ValueError`
+- [ ] `nohtyP hon IndexError -1 True`
+Slices clamp out-of-range bounds, so `s[1:100]` is fine. `find` returns -1 when the substring is missing, while `index` would raise `ValueError`.
+:::
+
+:::quiz
+```python norun
+import re
+print(re.findall(r"<.+>", "<a><b>"), re.findall(r"<.+?>", "<a><b>"), re.findall(r"(\d)(\w)", "1a 2b"))
+```
+What prints?
+- [x] `['<a><b>'] ['<a>', '<b>'] [('1', 'a'), ('2', 'b')]`
+- [ ] `['<a>', '<b>'] ['<a>', '<b>'] ['1a', '2b']`
+- [ ] `['<a><b>'] ['<a><b>'] [('1', 'a'), ('2', 'b')]`
+`.+` is **greedy** and grabs as much as possible, while `.+?` is lazy. When the pattern has several **groups**, `findall` returns tuples of groups rather than whole matches.
+:::
+
 ## Practice problems
 
 :::problem basic | Valid palindrome | two pointers, isalnum
@@ -569,4 +608,188 @@ print(edit_script("kitten", "sitting"))
 ```
 :::explain
 `D[i][j]` is the distance between the first `i` characters of `a` and the first `j` of `b`. Each cell takes the best of delete, insert, or replace/match from its three neighbours. Since row `i` only needs row `i-1`, two rows suffice for the distance alone. The full table is kept only to **backtrack** an actual edit script. Spell-checkers, DNA alignment and `difflib` all build on this DP (see *Dynamic Programming*).
+:::end
+
+## ✍️ Write a program
+
+Now write real code. Type your solution in the editor, press **▶ Run tests** (or Ctrl+Enter) and the tests run right in your browser. Stuck? Use **👣 Visualise my code**, then open the hints. Problems marked with a LeetCode number link to the original, so you can submit there too.
+
+:::program basic | Length of last word | LeetCode 58 | https://leetcode.com/problems/length-of-last-word/
+Return the length of the last word in a string of words and spaces (the string may have trailing spaces). Solve it once with `split()`, then with a **backward scan** that uses O(1) extra space.
+:::starter
+```python norun
+def length_of_last_word(s):
+    pass
+```
+:::tests
+```python norun
+assert length_of_last_word("Hello World") == 5
+assert length_of_last_word("   fly me   to   the moon  ") == 4
+assert length_of_last_word("luffy is still joyboy") == 6
+assert length_of_last_word("a") == 1
+assert length_of_last_word("a ") == 1
+```
+:::solution
+```python
+def length_of_last_word(s):
+    i = len(s) - 1
+    while i >= 0 and s[i] == " ":
+        i -= 1                        # skip trailing spaces
+    length = 0
+    while i >= 0 and s[i] != " ":
+        length += 1
+        i -= 1
+    return length
+
+def length_of_last_word_split(s):
+    return len(s.split()[-1])
+
+print(length_of_last_word("   fly me   to   the moon  "), length_of_last_word_split("Hello World"))
+```
+:::explain
+`split()` is the readable one-liner, but it builds every word just to use the last one. Scanning from the end touches only the trailing spaces and the last word, which is O(k) time and O(1) memory. It's a good habit to know when "pythonic" and "efficient" differ.
+:::complexity
+O(n) worst case, O(1) extra space.
+:::end
+
+:::program basic | Longest common prefix | LeetCode 14 | https://leetcode.com/problems/longest-common-prefix/
+Return the longest common prefix of a list of strings (`""` if there's none).
+:::starter
+```python norun
+def longest_common_prefix(strs):
+    pass
+```
+:::tests
+```python norun
+assert longest_common_prefix(["flower", "flow", "flight"]) == "fl"
+assert longest_common_prefix(["dog", "racecar", "car"]) == ""
+assert longest_common_prefix(["alone"]) == "alone"
+assert longest_common_prefix([]) == ""
+assert longest_common_prefix(["ab", "a", "abc"]) == "a"
+```
+:::hint
+`zip(*strs)` walks all the strings column by column and stops at the shortest one. A column belongs to the prefix only if all its characters are the same (`len(set(col)) == 1`).
+:::solution
+```python
+def longest_common_prefix(strs):
+    prefix = []
+    for column in zip(*strs):
+        if len(set(column)) != 1:
+            break
+        prefix.append(column[0])
+    return "".join(prefix)
+
+import os
+print(longest_common_prefix(["flower", "flow", "flight"]), os.path.commonprefix(["interview", "internet"]))
+```
+:::explain
+`zip(*strs)` turns a list of words into **columns** of characters, automatically stopping at the shortest word. The first column where the characters disagree ends the prefix. Characters are collected in a list and joined once at the end. (`os.path.commonprefix` does the same thing character-wise, despite its name.)
+:::complexity
+O(total characters examined).
+:::end
+
+:::program medium | Zigzag conversion | LeetCode 6 | https://leetcode.com/problems/zigzag-conversion/
+Write `s` in a zigzag over `num_rows` rows and read it row by row: `"PAYPALISHIRING"`, 3 rows → `"PAHNAPLSIIGYIR"`.
+
+```text
+P   A   H   N
+A P L S I I G
+Y   I   R
+```
+:::starter
+```python norun
+def convert(s, num_rows):
+    pass
+```
+:::tests
+```python norun
+assert convert("PAYPALISHIRING", 3) == "PAHNAPLSIIGYIR"
+assert convert("PAYPALISHIRING", 4) == "PINALSIGYAHRPI"
+assert convert("A", 1) == "A"
+assert convert("AB", 1) == "AB"
+assert convert("ABC", 5) == "ABC"
+```
+:::hint
+Simulate it: keep one string builder (a list) per row and a current row that bounces between 0 and `num_rows - 1`. Flip the direction at the top and bottom rows.
+:::solution
+```python
+def convert(s, num_rows):
+    if num_rows == 1 or num_rows >= len(s):
+        return s
+    rows = [[] for _ in range(num_rows)]
+    r, step = 0, 1
+    for ch in s:
+        rows[r].append(ch)
+        if r == 0:
+            step = 1
+        elif r == num_rows - 1:
+            step = -1
+        r += step
+    return "".join("".join(row) for row in rows)
+
+print(convert("PAYPALISHIRING", 3), convert("PAYPALISHIRING", 4))
+```
+:::explain
+There's no need to build a 2-D grid: only the **order** of characters per row matters. A row index bouncing with `step = ±1` traces the zigzag, and lists of characters joined at the end avoid quadratic string building. The early return handles 1 row (where `step` would never flip).
+:::trace
+`"PAYPAL"`, 3 rows:
+| ch | row | rows so far |
+|---|---|---|
+| P | 0 | P / - / - |
+| A | 1 | P / A / - |
+| Y | 2 | P / A / Y |
+| P | 1 | P / AP / Y |
+| A | 0 | PA / AP / Y |
+| L | 1 | PA / APL / Y → "PAAPLY" |
+:::complexity
+O(n).
+:::end
+
+:::program hard | Text justification | LeetCode 68 | https://leetcode.com/problems/text-justification/
+Format words into lines of exactly `max_width` characters. Pack words greedily. Distribute the extra spaces as **evenly** as possible between words, giving the left gaps more when it doesn't divide evenly. A line with one word, and the **last** line, are left-justified (padded on the right).
+:::starter
+```python norun
+def full_justify(words, max_width):
+    pass
+```
+:::tests
+```python norun
+assert full_justify(["This", "is", "an", "example", "of", "text", "justification."], 16) == ["This    is    an", "example  of text", "justification.  "]
+assert full_justify(["What", "must", "be", "acknowledgment", "shall", "be"], 16) == ["What   must   be", "acknowledgment  ", "shall be        "]
+assert full_justify(["a"], 1) == ["a"]
+assert all(len(l) == 20 for l in full_justify(["Science", "is", "what", "we", "understand", "well", "enough", "to", "explain"], 20))
+```
+:::hint
+Build each line greedily (a line's length is the sum of its word lengths + one space per gap). For a full line with g gaps and `extra = max_width − letters`, each gap gets `extra // g` spaces and the first `extra % g` gaps get one more: `divmod`!
+:::solution
+```python
+def full_justify(words, max_width):
+    lines, current, letters = [], [], 0
+    for w in words:
+        if current and letters + len(w) + len(current) > max_width:   # len(current) = minimal spaces needed
+            lines.append(current)
+            current, letters = [], 0
+        current.append(w)
+        letters += len(w)
+    out = []
+    for line in lines:
+        gaps = len(line) - 1
+        if gaps == 0:
+            out.append(line[0].ljust(max_width))
+            continue
+        each, extra = divmod(max_width - sum(map(len, line)), gaps)
+        s = ""
+        for i, w in enumerate(line[:-1]):
+            s += w + " " * (each + (1 if i < extra else 0))
+        out.append(s + line[-1])
+    out.append(" ".join(current).ljust(max_width))  # the last (still pending) line: left-justified
+    return out
+
+for row in full_justify(["This", "is", "an", "example", "of", "text", "justification."], 16):
+    print(f"|{row}|")
+```
+:::explain
+There are two phases. **Packing**: a word fits if `letters + len(w) + len(current)` (one space before each existing word) stays within the width. The last line is still in `current` after the loop. Using a different name for the loop variable below matters: reusing `line` would silently clobber it (a real bug the tests caught while this was being written). **Spacing**: `divmod(total_spaces, gaps)` gives the base width and how many left gaps get an extra space. `str.ljust` pads single-word lines and the last line. This is a classic string-formatting "hard" problem: the logic is simple, but every off-by-one matters.
+:::complexity
+O(total characters).
 :::end
